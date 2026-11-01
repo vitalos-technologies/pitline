@@ -1,6 +1,6 @@
 /**
  * D22 number provisioning against local Supabase: the real store (createSupabaseNumbersRepo, the SQL
- * functions of 20261029003400_twilio_numbers.sql through PostgREST) with the mock Twilio client. A garage
+ * functions of 20261101000200_twilio_numbers.sql through PostgREST) with the mock Twilio client. A garage
  * on a trial account waits for the upgrade; on an upgraded account it gets one number, routed so the voice
  * webhook never rings the garage back; a re-run buys nothing; the owner reads the state through RLS and
  * another garage's owner reads nothing. Only garage-scoped runs, so other suites' garages are untouched.

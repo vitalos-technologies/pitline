@@ -64,7 +64,7 @@ jobs:
           cache-dependency-path: services/voice/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-      - run: bash -n deploy/azure/deploy.sh && deploy/azure/deploy.sh --dry-run
+      - run: bash -n deploy/cloudrun/deploy.sh && deploy/cloudrun/deploy.sh --dry-run
 
   # pgTAP, the PostgREST suites (incl. the Gate 1 tenancy suite), the demo seed, the host-routing
   # smoke and the invoice PDF access tests.

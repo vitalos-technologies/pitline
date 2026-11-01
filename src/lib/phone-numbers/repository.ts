@@ -6,7 +6,7 @@ import type { AttachResult, DueGarage, NumbersRepo, PlatformPatch } from "./prov
 import { isNumberStatus, type AiDeskNumber } from "./state";
 
 // The numbers store (D22). Service role for the job: the five SQL functions of
-// 20261029003400_twilio_numbers.sql and the one-row platform table. The settings page reads the garage's own
+// 20261101000200_twilio_numbers.sql and the one-row platform table. The settings page reads the garage's own
 // row through the member's RLS client (loadAiDeskNumber).
 
 const DUE_LIMIT = 50;

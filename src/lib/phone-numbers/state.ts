@@ -33,7 +33,7 @@ export type NumberStateView = {
 
 const REASONS: Record<string, string> = {
   no_numbers_available: "Our phone provider had no UK numbers free.",
-  number_taken: "The number we picked was already in use on Autofix.",
+  number_taken: "The number we picked was already in use on Pitline.",
   already_provisioned: "Your garage already has a different number on record.",
   purchase_unconfirmed: "Our phone provider didn't confirm the order in time.",
 };
@@ -66,7 +66,7 @@ export function aiDeskNumberView(number: AiDeskNumber | null, options: { enabled
     case "waiting_bundle":
       return { tone: "warning", label: "Waiting for approval", detail: "UK numbers need paperwork approved by our phone provider (Twilio) first. Your number is ordered as soon as it's approved; we check every day." };
     case "cap_reached":
-      return { tone: "warning", label: "On the waiting list", detail: "Autofix has reached its limit of phone numbers for now. Your garage is on the list and gets a number as soon as there's room; we check every day." };
+      return { tone: "warning", label: "On the waiting list", detail: "Pitline has reached its limit of phone numbers for now. Your garage is on the list and gets a number as soon as there's room; we check every day." };
     case "not_configured":
       return { tone: "warning", label: "Waiting for Vitalos", detail: "Vitalos is finishing the phone set-up. Your number is ordered as soon as that's done; we check every day." };
     case "failed":

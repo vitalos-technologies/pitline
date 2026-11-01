@@ -1,19 +1,19 @@
 # AI front desk on calls (voice desk, D20)
 
-Pro garages with the AI front desk switched on have their missed calls answered by Autofix's own voice service. Decisions and assumptions: DECISIONS D20, AV1–AV10.
+Pro garages with the AI front desk switched on have their missed calls answered by Pitline's own voice service. Decisions and assumptions: DECISIONS D20, AV1–AV10.
 
 ## Call flow
 
 ```
-caller ─► Twilio number ─► POST /api/webhooks/twilio/voice (Autofix, Vercel)
+caller ─► Twilio number ─► POST /api/webhooks/twilio/voice (Pitline, Vercel)
                               │ garage phone rings first (if it has one); missed, or no phone:
                               │ ai_front_desk_voice_ready(garage, PLAN_PRO_AI_MINUTES)?
                               │   no  ─► voicemail + text-back (Essentials flow)
                               │   yes ─► <Say>disclosure</Say>
                               │          <Connect action=…?step=relay><ConversationRelay url=wss://…/relay?g&c&e&s/>
-                              │          after the response: GET https://…/healthz (wakes the service)
+                              │          after the response: GET https://…/readyz (wakes the service)
                               ▼
-            Twilio ConversationRelay ─wss─► autofix-voice (/relay, services/voice, Azure Container Apps)
+            Twilio ConversationRelay ─wss─► pitline-voice (/relay, services/voice, Cloud Run)
                                               │ checks the claim (HMAC, 5 min) [+ X-Twilio-Signature]
                                               │ POST /api/voice/v1/session ─► per-call agent token (30 min, one per call)
                                               │ garage_profile, list_services ─► instructions
@@ -35,8 +35,8 @@ caller ─► Twilio number ─► POST /api/webhooks/twilio/voice (Autofix, Ver
 | Summary tool | `log_call_summary` in `src/lib/agent-api/{schemas,handler}.ts`, `docs/autofix/agent-api.yaml` |
 | Database | `supabase/migrations/20261029002000_ai_voice_desk.sql`, pgTAP `039_ai_voice_desk.test.sql` |
 | Staff view | missed-call card (`src/components/admin-ui/missed-call-card.tsx`), Settings · AI front desk (status, Your AI desk number with divert codes, test-call guide, minutes) |
-| The garage's number (D22) | `src/lib/phone-numbers/*`, job `numbers.provision` (`src/lib/jobs/handlers/numbers-provision.ts`), Twilio adapter `src/lib/messaging/twilio-numbers.ts`, migration `20261029003400_twilio_numbers.sql`, pgTAP `043_twilio_numbers.test.sql` |
-| Voice service | `services/voice/` (README there), deploy `services/voice/deploy/azure/deploy.sh`, `.github/workflows/voice-deploy.yml` |
+| The garage's number (D22) | `src/lib/phone-numbers/*`, job `numbers.provision` (`src/lib/jobs/handlers/numbers-provision.ts`), Twilio adapter `src/lib/messaging/twilio-numbers.ts`, migration `20261101000200_twilio_numbers.sql`, pgTAP `043_twilio_numbers.test.sql` |
+| Voice service | `services/voice/` (README there), deploy `services/voice/deploy/cloudrun/deploy.sh`, `.github/workflows/voice-deploy.yml` |
 
 ## Switching it on in production
 
@@ -47,4 +47,4 @@ caller ─► Twilio number ─► POST /api/webhooks/twilio/voice (Autofix, Ver
 
 ## Testing without Twilio or Claude
 
-`pnpm test` covers the webhook, claim, session exchange and summary tool. `services/voice` has its own tests (`pnpm verify` there), with a scripted Claude and a fake Autofix: a full booking call, barge-in, Autofix or Claude being down, voicemail hand-back, and the WebSocket upgrade checks.
+`pnpm test` covers the webhook, claim, session exchange and summary tool. `services/voice` has its own tests (`pnpm verify` there), with a scripted Claude and a fake Pitline: a full booking call, barge-in, Pitline or Claude being down, voicemail hand-back, and the WebSocket upgrade checks.

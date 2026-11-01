@@ -36,7 +36,7 @@
  *   Neither page documents Retry-After or an idempotency key for REST POSTs.
  *
  * Idempotency: buying has no idempotency key, so a purchase is never retried here. Every number we buy gets a
- * FriendlyName that names what it is for (`Autofix texts`, `Autofix desk <garage id>`); a run that cannot tell
+ * FriendlyName that names what it is for (`Pitline texts`, `Pitline desk <garage id>`); a run that cannot tell
  * whether a purchase went through finds the number by that name on the next run instead of buying again.
  * GET requests are retried once after a short back-off on 429, 5xx or a network error.
  *

@@ -52,11 +52,11 @@ describe("live Twilio numbers client", () => {
 
   it("lists every number on the account across pages", async () => {
     const { calls, client: twilio } = client([
-      { body: { incoming_phone_numbers: [{ sid: PN, phone_number: "+447700900301", friendly_name: "Autofix texts", capabilities: { sms: true, voice: true } }], next_page_uri: `/2010-04-01/Accounts/${ACCOUNT}/IncomingPhoneNumbers.json?Page=1&PageSize=1000` } },
+      { body: { incoming_phone_numbers: [{ sid: PN, phone_number: "+447700900301", friendly_name: "Pitline texts", capabilities: { sms: true, voice: true } }], next_page_uri: `/2010-04-01/Accounts/${ACCOUNT}/IncomingPhoneNumbers.json?Page=1&PageSize=1000` } },
       { body: { incoming_phone_numbers: [{ sid: PN.replace("PN0", "PN1"), phone_number: "+441146974393", friendly_name: "Line", capabilities: { sms: false, voice: true } }], next_page_uri: null } },
     ]);
     await expect(twilio.listNumbers()).resolves.toEqual([
-      { sid: PN, phoneNumber: "+447700900301", friendlyName: "Autofix texts", sms: true, voice: true },
+      { sid: PN, phoneNumber: "+447700900301", friendlyName: "Pitline texts", sms: true, voice: true },
       { sid: PN.replace("PN0", "PN1"), phoneNumber: "+441146974393", friendlyName: "Line", sms: false, voice: true },
     ]);
     expect(calls.map((call) => call.url)).toEqual([
@@ -100,16 +100,16 @@ describe("live Twilio numbers client", () => {
 
   it("buys with the bundle, address, name and voice webhook, and adds a number to the service", async () => {
     const { calls, client: twilio } = client([
-      { status: 201, body: { sid: PN, phone_number: "+447700900301", friendly_name: "Autofix texts", capabilities: { sms: true, voice: true } } },
+      { status: 201, body: { sid: PN, phone_number: "+447700900301", friendly_name: "Pitline texts", capabilities: { sms: true, voice: true } } },
       { status: 201, body: { sid: PN } },
     ]);
-    await expect(twilio.buyNumber({ phoneNumber: "+447700900301", friendlyName: "Autofix texts", voiceUrl: "https://autofix.vitalos.co.uk/api/webhooks/twilio/voice", bundleSid: "BU0123456789abcdef0123456789abcdef", addressSid: "AD0123456789abcdef0123456789abcdef" }))
-      .resolves.toEqual({ sid: PN, phoneNumber: "+447700900301", friendlyName: "Autofix texts", sms: true, voice: true });
+    await expect(twilio.buyNumber({ phoneNumber: "+447700900301", friendlyName: "Pitline texts", voiceUrl: "https://autofix.vitalos.co.uk/api/webhooks/twilio/voice", bundleSid: "BU0123456789abcdef0123456789abcdef", addressSid: "AD0123456789abcdef0123456789abcdef" }))
+      .resolves.toEqual({ sid: PN, phoneNumber: "+447700900301", friendlyName: "Pitline texts", sms: true, voice: true });
     await twilio.addToService(PN);
     expect(calls[0]).toMatchObject({ method: "POST", url: `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT}/IncomingPhoneNumbers.json` });
     expect(Object.fromEntries(new URLSearchParams(calls[0]!.body))).toEqual({
       PhoneNumber: "+447700900301",
-      FriendlyName: "Autofix texts",
+      FriendlyName: "Pitline texts",
       VoiceUrl: "https://autofix.vitalos.co.uk/api/webhooks/twilio/voice",
       VoiceMethod: "POST",
       StatusCallback: "https://autofix.vitalos.co.uk/api/webhooks/twilio/voice",

@@ -1,4 +1,4 @@
-// Number provisioning (D22, DECISIONS A431–A438): the step that makes Autofix's Twilio numbers appear by
+// Number provisioning (D22, DECISIONS A431–A438): the step that makes Pitline's Twilio numbers appear by
 // themselves once the account is upgraded. Run by the `numbers.provision` job (daily, and at once when an
 // owner switches the AI front desk on); this module holds the decisions, against two interfaces: the Twilio
 // numbers client (live or mock) and the store (Supabase, or a fake in tests).
@@ -18,11 +18,11 @@
 //      happens. Not active -> `failed`.
 //   3. Count every number the account holds. At or over TWILIO_NUMBER_CAP -> `cap_reached`, nothing bought.
 //   4. A number bought by an earlier run that could not record it is found again by its FriendlyName
-//      (`Autofix texts`, `Autofix desk <garage id>`) and used instead of buying again.
+//      (`Pitline texts`, `Pitline desk <garage id>`) and used instead of buying again.
 //   5. No approved bundle -> `waiting_bundle`.
 //   6. Buy, route, record. Purchases are never retried in the same run; a 429/5xx stops the run (the job
 //      re-queues itself a bounded number of times), an unconfirmed purchase is found by name next time.
-// Autofix's own line (AUTOFIX_PLATFORM_VOICE_NUMBERS, A420) is never bought, adopted, routed, counted as a
+// Pitline's own line (AUTOFIX_PLATFORM_VOICE_NUMBERS, A420) is never bought, adopted, routed, counted as a
 // texting number or changed. Nothing is ever released or deleted (A436).
 
 import type { JobLogger } from "@/lib/jobs/types";
@@ -38,10 +38,10 @@ import type { NumbersConfig } from "./config";
 import type { NumberStatus, WaitingStatus } from "./state";
 
 /** FriendlyName of the texting number (the same name Launch ops `twilio-buy-mobile` uses). */
-export const TEXTING_NUMBER_NAME = "Autofix texts";
+export const TEXTING_NUMBER_NAME = "Pitline texts";
 /** FriendlyName of a garage's AI desk number: 13 + 36 characters, inside Twilio's 64. */
 export function deskNumberName(garageId: string): string {
-  return `Autofix desk ${garageId}`;
+  return `Pitline desk ${garageId}`;
 }
 
 const PN_SID = /^PN[0-9a-fA-F]{32}$/;
@@ -398,7 +398,7 @@ export async function provisionNumbers(input: ProvisionInput): Promise<Provision
       await run.attach(garage, garage.routedNumber, garage.routedSid, null);
     } else if (garage.providerSid) {
       // A number is on record for this garage: route it again, never buy a second (A434). One that cannot be
-      // routed (Autofix's own line, or no number) waits for Vitalos with a reason.
+      // routed (Pitline's own line, or no number) waits for Vitalos with a reason.
       if (garage.number && !isPlatform(garage.number)) await run.attach(garage, garage.number, garage.providerSid, false);
       else await run.setStatus([garage], "failed", "already_provisioned");
     } else {

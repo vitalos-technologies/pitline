@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 // Voice desk relay (P5.12 voice desk, DECISIONS AV1–AV10). Server only (node:crypto).
 //
-// A Pro garage's missed call is answered by Autofix's own voice service
-// (services/voice, Azure Container App `autofix-voice`). The voice webhook
+// A Pro garage's missed call is answered by Pitline's own voice service
+// (services/voice, Cloud Run service `pitline-voice`). The voice webhook
 // speaks the disclosure, then `<Connect><ConversationRelay url=…>` points
 // Twilio at the service's WebSocket with a signed, short-lived claim in the
 // query string: garage id, CallSid, expiry, HMAC-SHA-256(VOICE_RELAY_SECRET).
@@ -20,12 +20,17 @@ export const VOICE_RELAY_SECRET_MIN_LENGTH = 32;
 export const RELAY_CLAIM_TTL_SECONDS = 300;
 /** The header the voice service sends VOICE_RELAY_SECRET in when it asks for a call's token. */
 export const VOICE_SERVICE_KEY_HEADER = "x-autofix-voice-key";
+/**
+ * The path fetched to wake the service. Not /healthz: Cloud Run's front end answers /healthz itself (404)
+ * and never passes it to the container, so it would not start a replica (DECISIONS AV5, D21).
+ */
+export const VOICE_WAKE_PATH = "/readyz";
 
 export type VoiceRelayTarget = {
   /** wss://host/relay, no query. */
   url: string;
-  /** https://host/healthz, fetched to wake the service while the disclosure plays. */
-  healthUrl: string;
+  /** https://host/readyz, fetched to wake the service while the disclosure plays. */
+  wakeUrl: string;
   secret: string;
 };
 
@@ -45,10 +50,10 @@ export function parseVoiceRelayTarget(env: Readonly<Record<string, string | unde
     return null;
   }
   if (url.protocol !== "wss:" || url.search || url.hash || url.username || url.password) return null;
-  const health = new URL(url.toString());
-  health.protocol = "https:";
-  health.pathname = "/healthz";
-  return { url: url.toString(), healthUrl: health.toString(), secret };
+  const wake = new URL(url.toString());
+  wake.protocol = "https:";
+  wake.pathname = VOICE_WAKE_PATH;
+  return { url: url.toString(), wakeUrl: wake.toString(), secret };
 }
 
 function payload(claim: RelayClaim) {

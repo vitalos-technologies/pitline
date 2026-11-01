@@ -11,7 +11,7 @@ import { handleVoiceSessionRequest } from "@/lib/ai-front-desk/voice-session";
 
 const SECRET = "voice-relay-secret-0123456789-abcdefghij";
 const ENV = { VOICE_RELAY_URL: "wss://voice.example/relay", VOICE_RELAY_SECRET: SECRET };
-const TARGET: VoiceRelayTarget = { url: ENV.VOICE_RELAY_URL, healthUrl: "https://voice.example/healthz", secret: SECRET };
+const TARGET: VoiceRelayTarget = { url: ENV.VOICE_RELAY_URL, wakeUrl: "https://voice.example/readyz", secret: SECRET };
 const GARAGE = "a0000000-0000-4000-8000-00000000000a";
 const CALL = "CA00000000000000000000000000000001";
 const NOW = new Date("2026-10-29T10:00:00Z");
@@ -24,7 +24,7 @@ function claimBody(now = NOW) {
 function request(body: unknown, key: string | null = SECRET) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (key) headers[VOICE_SERVICE_KEY_HEADER] = key;
-  return new Request("https://autofix.vitalos.co.uk/api/voice/v1/session", { method: "POST", headers, body: typeof body === "string" ? body : JSON.stringify(body) });
+  return new Request("https://pitline.co.uk/api/voice/v1/session", { method: "POST", headers, body: typeof body === "string" ? body : JSON.stringify(body) });
 }
 
 describe("POST /api/voice/v1/session", () => {

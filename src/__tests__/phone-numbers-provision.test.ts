@@ -7,7 +7,7 @@ import { deskNumberName, provisionNumbers, TEXTING_NUMBER_NAME, type AttachResul
 import type { NumberStatus, WaitingStatus } from "@/lib/phone-numbers/state";
 
 // D22: the number provisioning step against the mock Twilio client and an in-memory store that behaves like
-// 20261029003400_twilio_numbers.sql (pgTAP 043 covers the SQL itself).
+// 20261101000200_twilio_numbers.sql (pgTAP 043 covers the SQL itself).
 
 const PLATFORM_LINE = "+441146974393";
 const VOICE_URL = "https://autofix.vitalos.co.uk/api/webhooks/twilio/voice";
@@ -319,7 +319,7 @@ describe("numbers.provision on an upgraded account", () => {
   });
 });
 
-describe("numbers.provision never touches Autofix's own line (A420)", () => {
+describe("numbers.provision never touches Pitline's own line (A420)", () => {
   it("does not count it as the texting number or adopt it, even in the service with SMS and our name", async () => {
     const disguised = { ...platformLine, friendlyName: TEXTING_NUMBER_NAME, sms: true };
     // Sheffield's drama range shares 0114 with the platform line: it is offered first, and skipped.

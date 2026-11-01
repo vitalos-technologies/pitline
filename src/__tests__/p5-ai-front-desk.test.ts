@@ -1,7 +1,7 @@
 /**
  * P5.12 AI front desk on Pro (voice desk): the hook in the Twilio voice webhook (Essentials unchanged,
  * Pro with the switch on and minutes left gets the disclosure and the ConversationRelay connection to
- * Autofix's voice service, a failed session falls back to voicemail + text-back), the relay claim, the
+ * Pitline's voice service, a failed session falls back to voicemail + text-back), the relay claim, the
  * settings states and actions' plan and role gates, and the usage month shared with the Plan page.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,7 +57,7 @@ import { PlanRequiredError } from "@/lib/plans/entitlements";
 // ---------------------------------------------------------------------------
 
 const SECRET = "voice-relay-secret-0123456789-abcdefghij";
-const RELAY: VoiceRelayTarget = { url: "wss://autofix-voice.example.azurecontainerapps.io/relay", healthUrl: "https://autofix-voice.example.azurecontainerapps.io/healthz", secret: SECRET };
+const RELAY: VoiceRelayTarget = { url: "wss://pitline-voice-123456789012.europe-west2.run.app/relay", wakeUrl: "https://pitline-voice-123456789012.europe-west2.run.app/readyz", secret: SECRET };
 const GARAGE = "a0000000-0000-4000-8000-00000000000a";
 const CALL = "CA00000000000000000000000000000001";
 
@@ -65,7 +65,7 @@ describe("voice relay target and claim", () => {
   it("needs a wss:// URL without a query and a 32+ character secret", () => {
     expect(parseVoiceRelayTarget({ VOICE_RELAY_URL: RELAY.url, VOICE_RELAY_SECRET: ` ${SECRET} ` })).toEqual(RELAY);
     for (const [url, secret] of [
-      ["", SECRET], [RELAY.url, ""], [RELAY.url, "short"], ["https://autofix-voice.example/relay", SECRET],
+      ["", SECRET], [RELAY.url, ""], [RELAY.url, "short"], ["https://pitline-voice.example/relay", SECRET],
       [`${RELAY.url}?g=1`, SECRET], ["wss://user:pw@host/relay", SECRET], ["not a url", SECRET],
     ] as const) {
       expect(parseVoiceRelayTarget({ VOICE_RELAY_URL: url, VOICE_RELAY_SECRET: secret }), `${url} / ${secret.length}`).toBeNull();
@@ -132,7 +132,7 @@ describe("settings states", () => {
 // ---------------------------------------------------------------------------
 
 const AUTH_TOKEN = "twilio-test-auth-token-0123456789";
-const BASE = "https://autofix.vitalos.co.uk";
+const BASE = "https://pitline.co.uk";
 const ENV = { TWILIO_AUTH_TOKEN: AUTH_TOKEN, TWILIO_WEBHOOK_BASE_URL: BASE, PLAN_PRO_AI_MINUTES: "200" };
 const GARAGE_NUMBER = "+447700100200";
 const CALLER = "+447700900123";
@@ -256,7 +256,7 @@ describe("voice webhook: Pro with the AI front desk on answers missed calls", ()
     expect(state.textBacks).toEqual([]);
     expect(d.prewarmed).toEqual([]);
     await runAfter(d);
-    expect(d.prewarmed).toEqual([RELAY.healthUrl]);
+    expect(d.prewarmed).toEqual([RELAY.wakeUrl]);
   });
 
   it("after the garage's phone goes unanswered the call goes to the AI front desk", async () => {
@@ -267,7 +267,7 @@ describe("voice webhook: Pro with the AI front desk on answers missed calls", ()
     expect(xml).toContain("<ConversationRelay ");
     expect(state.textBacks).toEqual([]);
     await runAfter(d);
-    expect(d.prewarmed).toEqual([RELAY.healthUrl]);
+    expect(d.prewarmed).toEqual([RELAY.wakeUrl]);
   });
 
   it("a failed session (service down) falls back to the voicemail and the text-back, once", async () => {

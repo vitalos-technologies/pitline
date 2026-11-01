@@ -8,7 +8,7 @@
 //                       the https origin the bought numbers' calls and call status are pointed at
 //                       (<origin>/api/webhooks/twilio/voice).
 //   AUTOFIX_PLATFORM_VOICE_NUMBERS
-//                       Autofix's own line(s) (A420): never bought, adopted, routed or counted as a texting
+//                       Pitline's own line(s) (A420): never bought, adopted, routed or counted as a texting
 //                       number.
 
 import { platformVoiceNumbers } from "@/lib/calls/platform-line";

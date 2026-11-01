@@ -9,8 +9,8 @@ import { databaseError, type JobHandler } from "../types";
 // one job per garage (every garage, cancelled ones too: the limits apply to
 // whatever data a garage still holds, A24), then platform housekeeping that
 // holds no garage data: vehicle_facts rows older than 30 days (the cache is
-// only trusted for 24 hours), finished jobs older than 14 days, the product's
-// own line's voicemail links after 12 months (apply_platform_call_retention(),
+// only trusted for 24 hours), finished jobs older than 14 days, Pitline's own
+// line's voicemail links after 12 months (apply_platform_call_retention(),
 // A420) and contact page enquiries last changed over 24 months ago
 // (apply_platform_enquiry_retention(), A430). With a
 // garage: apply_enquiry_retention() (bookings, enquiries, customers) and

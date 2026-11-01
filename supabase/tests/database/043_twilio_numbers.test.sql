@@ -6,7 +6,7 @@ set local timezone to 'UTC';
 
 select plan(54);
 
--- D22 Twilio numbers (20261029003400_twilio_numbers.sql): garage_phone_numbers.ring_garage_first,
+-- D22 Twilio numbers (20261101000200_twilio_numbers.sql): garage_phone_numbers.ring_garage_first,
 -- ai_front_desk_numbers (tenant), twilio_number_provisioning (platform, one row) and the five
 -- service-role functions behind the numbers.provision job.
 --

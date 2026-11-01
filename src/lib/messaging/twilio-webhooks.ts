@@ -40,21 +40,21 @@ import { readVerifiedTwilioRequest, twilioWebhookUrl, twimlResponse, webhookErro
 // - voice, AI front desk (P5.12 voice desk, Pro): where a call is missed, a
 //   garage on Pro with the front desk switched on and AI minutes left this
 //   month (ai_front_desk_voice_ready()) hears the AI disclosure and is
-//   connected to Autofix's voice service over Twilio ConversationRelay (no
+//   connected to Pitline's voice service over Twilio ConversationRelay (no
 //   text-back queued); the service is woken while the disclosure plays.
 //   ?step=relay: a session that failed (service down) falls back to the
 //   voicemail and the text-back; one the service ended asking for a message
 //   gets the voicemail. Without the voice service configured
 //   (VOICE_RELAY_URL, VOICE_RELAY_SECRET), or if the check fails, the flow
 //   above is unchanged (src/lib/ai-front-desk/hand-off.ts).
-// - voice, a number Autofix bought for a garage's AI front desk (D22, A432):
+// - voice, a number Pitline bought for a garage's AI front desk (D22, A432):
 //   garage_phone_numbers.ring_garage_first is false. The garage's own phone
 //   diverts missed calls to it, so the garage's phone is never rung first
 //   (that would loop back here): straight to the AI front desk, or the
 //   voicemail and text-back when the desk can't take the call.
-// - voice, Autofix's own line (A420): a number in AUTOFIX_PLATFORM_VOICE_NUMBERS
+// - voice, Pitline's own line (A420): a number in AUTOFIX_PLATFORM_VOICE_NUMBERS
 //   belongs to no garage. The call is logged in `platform_calls` (which no
-//   garage can read), greeted in Autofix's name and sent to the voicemail: no
+//   garage can read), greeted in Pitline's name and sent to the voicemail: no
 //   ring-through, no text-back, no AI front desk (src/lib/calls/platform-line.ts).
 // Logs carry ids, kinds and outcome codes only: never numbers or bodies.
 
@@ -65,7 +65,7 @@ export type RoutedNumber = {
   garageName: string;
   purpose: string;
   /**
-   * D22, A432: false for a number Autofix bought for the garage's AI front desk. The garage's own phone forwards
+   * D22, A432: false for a number Pitline bought for the garage's AI front desk. The garage's own phone forwards
    * its missed calls there, so the call never rings that phone again (it would come straight back: a loop).
    * Absent means true (every other number, as before).
    */
@@ -92,7 +92,7 @@ export type CallRecord = {
   missed: boolean;
 };
 
-/** A call to Autofix's own line (A420): no garage, so no dial outcome and no text-back. */
+/** A call to Pitline's own line (A420): no garage, so no dial outcome and no text-back. */
 export type PlatformCallRecord = {
   callSid: string;
   from: string | null;
@@ -126,7 +126,7 @@ export interface TwilioWebhookRepo {
   /** Whether this caller rang this garage in the last `withinMs` on another call (a forward that came back to us). */
   callerRangRecently(garageId: string, from: string, callSid: string, withinMs: number): Promise<boolean>;
   recordDialOutcome(garageId: string, callSid: string, outcome: DialOutcome): Promise<{ callId: string | null }>;
-  /** A420: inserts a call to Autofix's own line in `platform_calls`, or moves its status forward. */
+  /** A420: inserts a call to Pitline's own line in `platform_calls`, or moves its status forward. */
   recordPlatformCall(call: PlatformCallRecord): Promise<{ outcome: "created" | "updated" | "unchanged" }>;
   /** Stores the voicemail link on the call by CallSid (unique across garages), in `calls` or else `platform_calls`; false when there is no such call. */
   recordVoicemail(callSid: string, voicemail: { url: string; durationSeconds: number | null }): Promise<boolean>;
@@ -149,11 +149,11 @@ export type TwilioWebhookDeps = {
   voiceRelayTarget?: VoiceRelayTarget | null;
   /** Wakes the voice service (GET its health URL) after the response, while the disclosure plays. */
   prewarm?: (url: string) => Promise<unknown>;
-  /** A420: Autofix's own numbers; undefined reads AUTOFIX_PLATFORM_VOICE_NUMBERS from `env` (or process.env). */
+  /** A420: Pitline's own numbers; undefined reads AUTOFIX_PLATFORM_VOICE_NUMBERS from `env` (or process.env). */
   platformVoiceNumbers?: ReadonlySet<string>;
 };
 
-/** `prewarm`: a URL to fetch after the response (the voice service's health check). */
+/** `prewarm`: a URL to fetch after the response (the voice service's /readyz, which wakes it). */
 type Outcome = { status: "processed" | "ignored"; outcome: string; response?: Response; queued?: JobKind[]; prewarm?: string };
 
 const defaultLog = createJobLogger({ source: "twilio_webhook" });
@@ -332,7 +332,7 @@ async function voice(form: Record<string, string>, repo: TwilioWebhookRepo, cont
       ? twimlResponse(dialTwiml({ number: target, actionUrl: voiceStepUrl(context.signedUrl, "dial") }))
       : agent ? relayConnect(agent, routed, callSid, context) : voicemail(routed, context);
     const outcome = dialling ? "call_dialling" : agent ? "call_ai_front_desk" : loop ? "call_forward_returned" : forwardedHere ? "call_forwarded_missed" : "call_missed";
-    return { status: "processed", outcome, response, queued, prewarm: agent?.healthUrl };
+    return { status: "processed", outcome, response, queued, prewarm: agent?.wakeUrl };
   };
 
   // A repeated request (Twilio retrying a slow answer) gets the same TwiML, without the writes.
@@ -341,7 +341,7 @@ async function voice(form: Record<string, string>, repo: TwilioWebhookRepo, cont
 }
 
 /**
- * A420: a call to Autofix's own line. Logged in `platform_calls`, greeted in Autofix's name, then the
+ * A420: a call to Pitline's own line. Logged in `platform_calls`, greeted in Pitline's name, then the
  * voicemail (the recording steps are shared with garage calls). Nothing rings and nothing is texted.
  */
 async function platformVoice(form: Record<string, string>, repo: TwilioWebhookRepo, callSid: string, to: string, context: VoiceContext): Promise<Outcome> {
@@ -398,7 +398,7 @@ async function dialFinished(form: Record<string, string>, repo: TwilioWebhookRep
       outcome: missed ? (agent ? "dial_missed_ai_front_desk" : "dial_missed") : "dial_answered",
       response: missed ? (agent ? relayConnect(agent, routed, callSid, context) : voicemail(routed, context)) : twimlResponse("<Hangup/>"),
       queued,
-      prewarm: agent?.healthUrl,
+      prewarm: agent?.wakeUrl,
     };
   };
 

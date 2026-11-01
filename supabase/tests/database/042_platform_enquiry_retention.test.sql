@@ -6,7 +6,7 @@ set local search_path = public, extensions;
 select plan(6);
 
 -- Contact enquiries are deleted 24 months after their last change
--- (20261029003200_platform_enquiry_retention.sql, A430).
+-- (20261101000100_platform_enquiry_retention.sql, A430).
 
 insert into public.platform_enquiries (id, name, email, topic, message, status, received_at, updated_at) values
   ('4e100000-0000-4000-8000-000000000001', 'Old Enquirer', 'old@pgtap.test', 'general', 'An enquiry from long ago.', 'closed',

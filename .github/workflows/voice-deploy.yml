@@ -1,18 +1,22 @@
 name: Voice desk deploy
 
-# Deploys autofix-voice (services/voice: the AI front desk on calls, Twilio ConversationRelay + Claude) to
-# Azure Container Apps in the super admin's environment (cae-autofix-superadmin, rg-autofix-superadmin),
-# scale to zero, and connects the Autofix app to it (Vercel VOICE_RELAY_URL and VOICE_RELAY_SECRET,
-# production redeploy). Run by hand: Actions > Voice desk deploy > Run workflow.
-#   CHECK   reports which secrets are set (names only) and deploys nothing.
-#   DEPLOY  deploys. Without ANTHROPIC_API_KEY the service is deployed but the app is not pointed at it, so
-#           missed calls keep the voicemail and text-back until the key is added and DEPLOY runs again.
-# Approved by Temitope ("all should be active", 29 Oct 2026); £0 at rest. min_replicas=1 (about £10/month)
-# needs his OK first. Logs show names and states only; every secret is masked.
+# Deploys pitline-voice (services/voice: the AI front desk on calls, Twilio ConversationRelay + Claude) to
+# Cloud Run in GCP project vitalos-workforce (europe-west2, London; moved from Azure Container Apps on
+# 1 Nov 2026, D25), scale to zero, and connects the Pitline app to it (Vercel VOICE_RELAY_URL and
+# VOICE_RELAY_SECRET, production redeploy). Run by hand: Actions > Voice desk deploy > Run workflow.
+#   CHECK   reports which secrets are set (names only), checks the GCP sign-in, and deploys nothing.
+#   DEPLOY  deploys. Without a Claude key (ANTHROPIC_API_KEY, or one already in Secret Manager) the service
+#           is deployed but the app is not pointed at it, so missed calls keep the voicemail and text-back
+#           until the key is added and DEPLOY runs again.
+# Approved by Temitope ("all should be active", 29 Oct 2026); £0 at rest. min_replicas=1 (an always-on
+# instance, a monthly charge) needs Temitope's OK first. Logs show names and states only; every secret is
+# masked.
 #
-# Repository secrets: AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID (deploy
-# identity, Contributor on rg-autofix-superadmin only), GHCR_PULL_TOKEN, VERCEL_API_TOKEN, ANTHROPIC_API_KEY
-# (Claude, production) and optionally TWILIO_AUTH_TOKEN (checks Twilio's signature on the relay too).
+# Signs in to GCP with Workload Identity Federation (no key): repository variables
+# GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOY_SERVICE_ACCOUNT override the defaults below
+# (docs/autofix/INFRA.md, "Cloud Run"). Repository secrets: VERCEL_API_TOKEN, ANTHROPIC_API_KEY (Claude,
+# production) and optionally TWILIO_AUTH_TOKEN (checks Twilio's signature on the relay too); without them
+# the values already in Secret Manager are kept.
 on:
   workflow_dispatch:
     inputs:
@@ -21,7 +25,7 @@ on:
         required: true
         default: CHECK
       min_replicas:
-        description: 0 = scale to zero (£0 at rest); 1 = always warm (about £10/month, needs Temitope's OK)
+        description: 0 = scale to zero (£0 at rest); 1 = always warm (a monthly charge, needs Temitope's OK)
         type: choice
         default: "0"
         options: ["0", "1"]
@@ -29,6 +33,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: voice-deploy
@@ -41,17 +46,14 @@ jobs:
     timeout-minutes: 45
     env:
       IMAGE: ghcr.io/vitalos-technologies/autofix-voice:${{ github.sha }}
-      GHCR_PULL_USERNAME: ${{ vars.GHCR_PULL_USERNAME || 'Isaacpyo' }}
+      GCP_PROJECT: vitalos-workforce
+      GCP_PROJECT_NUMBER: "447460690610"
+      GCP_REGION: europe-west2
     steps:
       - uses: actions/checkout@v4
 
       - name: Check the secrets are set (names only)
         env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
@@ -59,15 +61,27 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
         run: |
           missing=0
-          for name in AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID GHCR_PULL_TOKEN \
-                      VERCEL_API_TOKEN VERCEL_PROJECT_ID VERCEL_TEAM_ID; do
+          for name in VERCEL_API_TOKEN VERCEL_PROJECT_ID VERCEL_TEAM_ID; do
             if [[ -z "${!name}" ]]; then echo "::error::$name is not set (services/voice/README.md, Deploy)"; missing=1; else echo "$name is set"; fi
           done
           for name in ANTHROPIC_API_KEY TWILIO_AUTH_TOKEN; do
             [[ -n "${!name}" ]] && echo "$name is set" || echo "$name is missing"
           done
-          [[ -n "$ANTHROPIC_API_KEY" ]] || echo "::warning::ANTHROPIC_API_KEY is missing: the service deploys, but calls keep the voicemail until it is added."
+          [[ -n "$ANTHROPIC_API_KEY" ]] || echo "::warning::ANTHROPIC_API_KEY is missing: the deploy keeps the Claude key already in Secret Manager, if there is one; without any, calls keep the voicemail."
           exit "$missing"
+
+      - name: Sign in to GCP (Workload Identity Federation, no key)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/447460690610/locations/global/workloadIdentityPools/github/providers/pitline' }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT || 'pitline-deploy@vitalos-workforce.iam.gserviceaccount.com' }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: 517.0.0
+      - name: Check the deploy identity
+        run: |
+          gcloud config set project "$GCP_PROJECT" --quiet
+          gcloud run services describe pitline-voice --region "$GCP_REGION" --format='value(metadata.name,status.conditions[0].status)'
 
       - name: Stop here (CHECK)
         if: inputs.confirm == 'CHECK'
@@ -103,52 +117,32 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker buildx build --push -t "$IMAGE" \
             --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
-            --label org.opencontainers.image.description="Autofix voice desk" .
+            --label org.opencontainers.image.description="Pitline voice desk" .
           docker logout ghcr.io
 
-      - uses: actions/setup-python@v5
-        if: inputs.confirm == 'DEPLOY'
-        with:
-          python-version: "3.12"
-      - name: Install the Azure CLI (pinned)
-        if: inputs.confirm == 'DEPLOY'
-        run: |
-          python -m venv "$RUNNER_TEMP/az"
-          "$RUNNER_TEMP/az/bin/pip" install -q azure-cli==2.91.0
-          echo "$RUNNER_TEMP/az/bin" >> "$GITHUB_PATH"
-          echo "AZURE_CONFIG_DIR=$RUNNER_TEMP/azure-config" >> "$GITHUB_ENV"
-      - name: Sign in to Azure (deploy identity)
+      - name: Deploy to Cloud Run
         if: inputs.confirm == 'DEPLOY'
         env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" -o none
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-          az group show -n rg-autofix-superadmin --query "{name:name,location:location}" -o tsv
-
-      - name: Deploy to Azure Container Apps
-        if: inputs.confirm == 'DEPLOY'
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           VOICE_CLAUDE_MODEL: ${{ vars.VOICE_CLAUDE_MODEL }}
           MIN_REPLICAS: ${{ inputs.min_replicas }}
           DEPLOY_OUT_FILE: ${{ runner.temp }}/voice.env
-        run: services/voice/deploy/azure/deploy.sh apply
+        run: services/voice/deploy/cloudrun/deploy.sh apply
 
       - name: Health check (wakes it from zero)
         if: inputs.confirm == 'DEPLOY'
         run: |
           origin="$(grep '^VOICE_ORIGIN=' "$RUNNER_TEMP/voice.env" | cut -d= -f2-)"
-          for _ in $(seq 1 30); do curl -fsS -o /dev/null "$origin/healthz" && break; sleep 5; done
-          curl -fsS -o /dev/null "$origin/healthz"
-          ready="$(curl -s -o /dev/null -w '%{http_code}' "$origin/readyz")"
+          # /readyz, as the voice webhook wakes it: Cloud Run answers /healthz itself and never passes it on.
+          # 200 with the Claude key, 503 without; anything else means the app did not answer.
+          for _ in $(seq 1 30); do
+            ready="$(curl -s -o /dev/null -w '%{http_code}' "$origin/readyz")"
+            [[ "$ready" == 200 || "$ready" == 503 ]] && break
+            sleep 5
+          done
           echo "readyz: $ready"
+          [[ "$ready" == 200 || "$ready" == 503 ]]
           # Without a claim the relay refuses the upgrade. HTTP/1.1, as Twilio connects: over HTTP/2 curl's
           # upgrade headers are dropped and the request lands on the plain 404 route.
           code="$(curl --http1.1 -s -o /dev/null -w '%{http_code}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
@@ -156,7 +150,7 @@ jobs:
           echo "relay without a claim: $code"
           [[ "$code" == 403 || "$code" == 503 ]]
 
-      - name: Point the Autofix app at it (Vercel env, production redeploy)
+      - name: Point the Pitline app at it (Vercel env, production redeploy)
         if: inputs.confirm == 'DEPLOY'
         env:
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
@@ -166,7 +160,7 @@ jobs:
           set -a; . "$RUNNER_TEMP/voice.env"; set +a
           echo "::add-mask::$VOICE_RELAY_SECRET"
           if [[ "$VOICE_CLAUDE_READY" != yes ]]; then
-            echo "::warning::No Claude key on the service yet: the Autofix app is not pointed at it, so missed calls keep the voicemail and text-back."
+            echo "::warning::No Claude key on the service yet: the Pitline app is not pointed at it, so missed calls keep the voicemail and text-back."
             exit 0
           fi
           node scripts/ci/voice-vercel.mjs
@@ -175,5 +169,4 @@ jobs:
         if: always()
         run: |
           rm -f "$RUNNER_TEMP/voice.env"
-          az logout 2>/dev/null || true
-          rm -rf "$RUNNER_TEMP/azure-config" "$RUNNER_TEMP/docker-config"
+          rm -rf "$RUNNER_TEMP/docker-config"
