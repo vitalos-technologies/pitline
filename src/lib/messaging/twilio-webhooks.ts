@@ -138,7 +138,7 @@ export type TwilioWebhookDeps = {
   platformVoiceNumbers?: ReadonlySet<string>;
 };
 
-/** `prewarm`: a URL to fetch after the response (the voice service's health check). */
+/** `prewarm`: a URL to fetch after the response (the voice service's /readyz, which wakes it). */
 type Outcome = { status: "processed" | "ignored"; outcome: string; response?: Response; queued?: JobKind[]; prewarm?: string };
 
 const defaultLog = createJobLogger({ source: "twilio_webhook" });
@@ -315,7 +315,7 @@ async function voice(form: Record<string, string>, repo: TwilioWebhookRepo, cont
       ? twimlResponse(dialTwiml({ number: target, actionUrl: voiceStepUrl(context.signedUrl, "dial") }))
       : agent ? relayConnect(agent, routed, callSid, context) : voicemail(routed, context);
     const outcome = dialling ? "call_dialling" : agent ? "call_ai_front_desk" : loop ? "call_forward_returned" : "call_missed";
-    return { status: "processed", outcome, response, queued, prewarm: agent?.healthUrl };
+    return { status: "processed", outcome, response, queued, prewarm: agent?.wakeUrl };
   };
 
   // A repeated request (Twilio retrying a slow answer) gets the same TwiML, without the writes.
@@ -381,7 +381,7 @@ async function dialFinished(form: Record<string, string>, repo: TwilioWebhookRep
       outcome: missed ? (agent ? "dial_missed_ai_front_desk" : "dial_missed") : "dial_answered",
       response: missed ? (agent ? relayConnect(agent, routed, callSid, context) : voicemail(routed, context)) : twimlResponse("<Hangup/>"),
       queued,
-      prewarm: agent?.healthUrl,
+      prewarm: agent?.wakeUrl,
     };
   };
 

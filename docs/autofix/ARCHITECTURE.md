@@ -531,7 +531,7 @@ Voice flow additions (`POST /api/webhooks/twilio/voice`):
 
 | Request | Event key | Writes | Answer |
 | --- | --- | --- | --- |
-| incoming call, no own phone to ring (or our forward came back), **voice desk ready** | `voice:<CallSid>:<status>` | `calls` row `missed = true`; **no** `calls.text_back` | `<Say>` disclosure + `<Connect action=?step=relay><ConversationRelay url=$VOICE_RELAY_URL?g=<garage>&c=<CallSid>&e=<expiry>&s=<hmac>/>`; outcome `call_ai_front_desk`; `/healthz` fetched after the response |
+| incoming call, no own phone to ring (or our forward came back), **voice desk ready** | `voice:<CallSid>:<status>` | `calls` row `missed = true`; **no** `calls.text_back` | `<Say>` disclosure + `<Connect action=?step=relay><ConversationRelay url=$VOICE_RELAY_URL?g=<garage>&c=<CallSid>&e=<expiry>&s=<hmac>/>`; outcome `call_ai_front_desk`; `/readyz` fetched after the response (Cloud Run answers `/healthz` itself) |
 | `?step=dial` missed (busy/no-answer/failed/canceled), **voice desk ready** | `voice:<CallSid>:dial` | `dial_status`, `missed = true`; no text-back | the same disclosure + relay; outcome `dial_missed_ai_front_desk` |
 | `?step=relay` (`SessionStatus`, `HandoffData` from `<Connect action>`) | `voice:<CallSid>:relay` | `failed`: `calls.text_back` queued | `failed`: voicemail (`relay_failed`); `ended` + `{"to":"voicemail"}`: voicemail, no text-back (`relay_voicemail`); otherwise `<Hangup/>` (`relay_ended`) |
 

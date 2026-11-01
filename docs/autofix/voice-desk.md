@@ -11,9 +11,9 @@ caller ─► Twilio number ─► POST /api/webhooks/twilio/voice (Pitline, Ver
                               │   no  ─► voicemail + text-back (Essentials flow)
                               │   yes ─► <Say>disclosure</Say>
                               │          <Connect action=…?step=relay><ConversationRelay url=wss://…/relay?g&c&e&s/>
-                              │          after the response: GET https://…/healthz (wakes the service)
+                              │          after the response: GET https://…/readyz (wakes the service)
                               ▼
-            Twilio ConversationRelay ─wss─► autofix-voice (/relay, services/voice, Azure Container Apps)
+            Twilio ConversationRelay ─wss─► pitline-voice (/relay, services/voice, Cloud Run)
                                               │ checks the claim (HMAC, 5 min) [+ X-Twilio-Signature]
                                               │ POST /api/voice/v1/session ─► per-call agent token (30 min, one per call)
                                               │ garage_profile, list_services ─► instructions
@@ -35,7 +35,7 @@ caller ─► Twilio number ─► POST /api/webhooks/twilio/voice (Pitline, Ver
 | Summary tool | `log_call_summary` in `src/lib/agent-api/{schemas,handler}.ts`, `docs/autofix/agent-api.yaml` |
 | Database | `supabase/migrations/20261029002000_ai_voice_desk.sql`, pgTAP `039_ai_voice_desk.test.sql` |
 | Staff view | missed-call card (`src/components/admin-ui/missed-call-card.tsx`), Settings · AI front desk (status, Pitline number, test-call guide, minutes) |
-| Voice service | `services/voice/` (README there), deploy `services/voice/deploy/azure/deploy.sh`, `.github/workflows/voice-deploy.yml` |
+| Voice service | `services/voice/` (README there), deploy `services/voice/deploy/cloudrun/deploy.sh`, `.github/workflows/voice-deploy.yml` |
 
 ## Switching it on in production
 

@@ -4,7 +4,7 @@ import { loadConfig, ready } from "./config.js";
 import { createAnthropicEngine, type Engine } from "./llm.js";
 import { log } from "./log.js";
 
-// autofix-voice entry point (Azure Container App, scale to zero; services/voice/README.md).
+// pitline-voice entry point (Cloud Run, scale to zero; services/voice/README.md).
 
 const config = loadConfig();
 
