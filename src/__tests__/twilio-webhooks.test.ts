@@ -483,7 +483,7 @@ describe("voice, Pitline's own line (A420)", () => {
     const findGarage = vi.spyOn(repo, "findGarageByNumber");
     const drainQueued = vi.fn(async () => undefined);
     const prewarm = vi.fn(async () => undefined);
-    const relay = { url: "wss://voice.example/relay", healthUrl: "https://voice.example/healthz", secret: "relay-secret-0123456789abcdef0123" };
+    const relay = { url: "wss://voice.example/relay", wakeUrl: "https://voice.example/readyz", secret: "relay-secret-0123456789abcdef0123" };
     const response = await handleTwilioWebhook(
       signedRequest("voice", callParams("ringing")),
       "voice",

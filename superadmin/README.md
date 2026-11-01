@@ -81,7 +81,7 @@ apps/autofix/      unmanaged models over the `superadmin` views, router, db (the
 apps/api/          DRF read-only API
 templates/, static/, assets/tailwind.css
 bin/               tailwind.sh, release.sh (migrate the default database + bootstrap admin), backup.sh (pg_dump)
-deploy/azure/      deploy.sh (--dry-run prints the plan; a real run needs DEPLOY_APPROVED=yes)
+deploy/cloudrun/   deploy.sh (Cloud Run; --dry-run prints the plan)
 tests/             pytest-django suite; tests/integration/ runs against the local Supabase
 e2e/smoke.py       Playwright browser smoke test (every page at 1440 and 390)
 docs/screenshots/
@@ -135,39 +135,23 @@ CI also builds the image, runs the release job twice, starts the production imag
 
 ## Deploy
 
-Production runs on Azure Container Apps (consumption plan, scale to zero) and answers at `https://pitline.co.uk/superadmin` through the Pitline app's proxy. The image is a private GitHub package. Its own data lives in schema `superadmin_app` in Pitline's Supabase project. Expected cost: £0 (DECISIONS D18, A415–A417). `.github/workflows/superadmin-deploy.yml` does everything: image, Supabase roles, Azure, Vercel variables and redeploy, and the live check. `superadmin/deploy/azure/deploy.sh --dry-run` prints what it creates.
+Production runs on Cloud Run in GCP project `vitalos-workforce` (europe-west2, London; scale to zero) and answers at `https://pitline.co.uk/superadmin` through the Pitline app's proxy. It moved there from Azure Container Apps on 1 Nov 2026 (DECISIONS D25). The image is a private GitHub package, pulled through the Artifact Registry remote repository `europe-west2-docker.pkg.dev/vitalos-workforce/ghcr`. Its own data lives in schema `superadmin_app` in Pitline's Supabase project. Expected cost: £0 at rest (DECISIONS D18, A415–A417). `.github/workflows/superadmin-deploy.yml` does everything: image, Supabase roles, the release job, the service `pitline-superadmin`, the job `pitline-superadmin-notify` and its Cloud Scheduler trigger (every 5 minutes, UTC), Vercel variables and redeploy, and the live check. `superadmin/deploy/cloudrun/deploy.sh --dry-run` prints what it deploys. Its secrets live in Secret Manager as `pitline-superadmin--<name>` (Django key, connection strings, proxy secret, status token, bootstrap password; optional Twilio and Sentry), read by the runtime account `apps-runtime@vitalos-workforce.iam.gserviceaccount.com`.
 
 ### One-time steps (Temitope)
 
 Never paste these values into a chat. Each goes straight into GitHub at **github.com/vitalos-technologies/pitline → Settings → Secrets and variables → Actions → New repository secret**.
 
-1. **Azure deploy identity.** Open https://shell.azure.com, signed in as the subscription owner, and choose **Bash**. Paste the script below. It starts the CI machine if it is stopped, creates resource group `rg-autofix-superadmin` and a deploy login that can change only that group, and prints four lines. Add each as a repository secret with the name before `=` and the value after it: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
-
-   ```bash
-   set -e
-   SUB=$(az account show --query id -o tsv)
-   echo "Subscription: $(az account show --query '[name,state]' -o tsv)"
-   VM=$(az vm list -d --query "[?name=='autofix-ci'].{rg:resourceGroup,state:powerState}" -o tsv)
-   RG_VM=$(echo "$VM" | cut -f1)
-   [ -n "$RG_VM" ] && [ "$(echo "$VM" | cut -f2)" != "VM running" ] && az vm start -g "$RG_VM" -n autofix-ci
-   for p in Microsoft.App Microsoft.OperationalInsights; do az provider register -n "$p" --wait; done
-   RG=rg-autofix-superadmin
-   az group create -n "$RG" -l uksouth --tags app=autofix-superadmin -o none
-   az ad sp create-for-rbac --name autofix-superadmin-deploy --role Contributor \
-     --scopes "$(az group show -n "$RG" --query id -o tsv)" --query "{appId:appId,password:password,tenant:tenant}" -o tsv \
-     | awk -v s="$SUB" '{print "AZURE_CLIENT_ID="$1"\nAZURE_CLIENT_SECRET="$2"\nAZURE_TENANT_ID="$3"\nAZURE_SUBSCRIPTION_ID="s}'
-   ```
-
-2. **Read-only GitHub token for the image.** Azure needs it to pull the private package. Open https://github.com/settings/tokens/new (Personal access tokens → **Tokens (classic)**; GitHub's fine-grained tokens can't read packages). Set Note `autofix-superadmin image pull`, Expiration **1 year**, and tick **only** `read:packages`. Generate it and add it as repository secret `GHCR_PULL_TOKEN`. If your GitHub username is not `Isaacpyo`, also add a repository **variable** `GHCR_PULL_USERNAME` with your username.
-3. **Bring production's database up to date.** Run the SQL bundle the Phase 5 session gave you in the Supabase SQL editor of Pitline's production project. It applies the merged migrations production doesn't have yet, the super admin's role among them. Launch ops `supabase-migrate` refuses on production, because its migration history table is empty.
-4. **Database logins for the super admin.** Choose one:
+1. **GCP deploy identity.** The workflow signs in with Workload Identity Federation, so there is no key to store. A project owner runs the setup in `docs/autofix/INFRA.md` ("Cloud Run", one-time setup) once. The services, jobs and secrets themselves were copied from Azure by `migrate.sh stage pitline`.
+2. **Bring production's database up to date.** Run the SQL bundle the Phase 5 session gave you in the Supabase SQL editor of Pitline's production project. It applies the merged migrations production doesn't have yet, the super admin's role among them. Launch ops `supabase-migrate` refuses on production, because its migration history table is empty.
+3. **Database logins for the super admin.** Already in Secret Manager since the move; the deploy keeps them. To replace them, choose one:
    - **Without a Supabase token (recommended).** In the same SQL editor, open `superadmin/deploy/supabase_roles.sql` from this repository. Replace `POOLER_HOST` (twice) with your session pooler host: Supabase → **Connect** → **Session pooler**, the part after `@` and before `:5432`, like `aws-0-eu-west-2.pooler.supabase.com`. Run it. It shows two rows. Add each value as the repository secret named in its `secret` column: `SUPERADMIN_DATABASE_URL` and `SUPERADMIN_AUTOFIX_DATABASE_URL`. The passwords are made inside the database, so no log carries them.
    - **With a Supabase token.** Create one at https://supabase.com/dashboard/account/tokens and add it as repository secret `SUPABASE_ACCESS_TOKEN`. The deploy then makes the logins itself, sending only password hashes.
-5. **Deploy.** Run **Actions → Super Admin deploy → Run workflow** and type `DEPLOY`. It ends with `https://pitline.co.uk/superadmin/login/` answering.
-6. **Set your password.** Open https://pitline.co.uk/superadmin/ once, to wake it. Then in Azure Cloud Shell run the command below. It prints a one-time 30-minute link; open it, set a password, then set up your authenticator app.
+4. **Deploy.** Run **Actions → Super Admin deploy → Run workflow** and type `DEPLOY`. It ends with `https://pitline.co.uk/superadmin/login/` answering.
+5. **Set your password** (only if you have not already). Cloud Run has no shell into a running container, so the link comes from a one-off run of the notify job with other arguments. Run the command below in Cloud Shell (https://shell.cloud.google.com, project `vitalos-workforce`); the 30-minute link is in that execution's logs (Cloud Run → Jobs → `pitline-superadmin-notify` → the newest execution → Logs). Open it, set a password, then set up your authenticator app.
 
    ```bash
-   az containerapp exec -g rg-autofix-superadmin -n autofix-superadmin --command "python manage.py issue_setup_link"
+   gcloud run jobs execute pitline-superadmin-notify --region europe-west2 --wait \
+     --args=manage.py,issue_setup_link,--email,temitope.agbola@vitalos.co.uk
    ```
 
 Re-run **Super Admin deploy** for each new version. It keeps every secret and password. Voicemail playback uses the repository secrets `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` (the ones the Vercel sync already uses); when either is missing, the deploy leaves them out and playback says it is not set up.

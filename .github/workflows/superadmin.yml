@@ -50,6 +50,8 @@ jobs:
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Ruff
         run: ruff check . && ruff format --check .
+      - name: Deploy script parses and prints its plan
+        run: bash -n deploy/cloudrun/deploy.sh && deploy/cloudrun/deploy.sh --dry-run
       - name: Migrations are up to date
         run: python manage.py makemigrations --check --dry-run
         env:

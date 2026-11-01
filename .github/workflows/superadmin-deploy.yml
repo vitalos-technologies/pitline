@@ -1,16 +1,18 @@
 name: Super Admin deploy
 
-# Deploys the Django super admin (superadmin/, DECISIONS D18, A415-A417) to Azure Container Apps and points
+# Deploys the Django super admin (superadmin/, DECISIONS D18, A415-A417) to Cloud Run in GCP project
+# vitalos-workforce (europe-west2, London; moved from Azure Container Apps on 1 Nov 2026, D25) and points
 # https://pitline.co.uk/superadmin at it. Run by hand: Actions > Super Admin deploy > Run workflow,
-# type DEPLOY. Approved by Temitope on 28 Oct 2026; cost £0 (Container Apps free grant with scale to zero,
-# a private GitHub package, Pitline's existing Supabase project). Safe to re-run: kept secrets and
+# type DEPLOY. Cost £0 at rest (Cloud Run free tier with scale to zero, a private GitHub package pulled
+# through Artifact Registry, Pitline's existing Supabase project). Safe to re-run: kept secrets and
 # passwords are reused. Logs show names and states only; every secret is masked.
 #
-# Repository secrets it needs (superadmin/README.md "Deploy"): AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
-# AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID (deploy identity, Contributor on rg-autofix-superadmin only),
-# GHCR_PULL_TOKEN (classic token, read:packages only) and VERCEL_API_TOKEN. For the database, either
+# Signs in to GCP with Workload Identity Federation (no key): repository variables
+# GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOY_SERVICE_ACCOUNT override the defaults below
+# (docs/autofix/INFRA.md, "Cloud Run"). Repository secrets: VERCEL_API_TOKEN and, for the database, either
 # SUPABASE_ACCESS_TOKEN (the deploy prepares the roles itself) or SUPERADMIN_DATABASE_URL and
-# SUPERADMIN_AUTOFIX_DATABASE_URL from superadmin/deploy/supabase_roles.sql (A418).
+# SUPERADMIN_AUTOFIX_DATABASE_URL from superadmin/deploy/supabase_roles.sql (A418); without them the
+# connection strings already in Secret Manager are kept.
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +23,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: superadmin-deploy
@@ -33,18 +36,15 @@ jobs:
     timeout-minutes: 60
     env:
       IMAGE: ghcr.io/vitalos-technologies/autofix-superadmin:${{ github.sha }}
-      GHCR_PULL_USERNAME: ${{ vars.GHCR_PULL_USERNAME || 'Isaacpyo' }}
+      GCP_PROJECT: vitalos-workforce
+      GCP_PROJECT_NUMBER: "447460690610"
+      GCP_REGION: europe-west2
       PRIMARY_OWNER_EMAIL: ${{ vars.SUPERADMIN_OWNER_EMAIL || 'temitope.agbola@vitalos.co.uk' }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Check the secrets are set (names only)
         env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPERADMIN_DATABASE_URL: ${{ secrets.SUPERADMIN_DATABASE_URL }}
           SUPERADMIN_AUTOFIX_DATABASE_URL: ${{ secrets.SUPERADMIN_AUTOFIX_DATABASE_URL }}
@@ -54,8 +54,7 @@ jobs:
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
         run: |
           missing=0
-          for name in AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID GHCR_PULL_TOKEN \
-                      VERCEL_API_TOKEN NEXT_PUBLIC_SUPABASE_URL VERCEL_PROJECT_ID VERCEL_TEAM_ID; do
+          for name in VERCEL_API_TOKEN NEXT_PUBLIC_SUPABASE_URL VERCEL_PROJECT_ID VERCEL_TEAM_ID; do
             if [[ -z "${!name}" ]]; then echo "::error::$name is not set (superadmin/README.md, Deploy)"; missing=1; else echo "$name is set"; fi
           done
           for name in SUPABASE_ACCESS_TOKEN SUPERADMIN_DATABASE_URL SUPERADMIN_AUTOFIX_DATABASE_URL; do
@@ -84,22 +83,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install the Azure CLI (pinned)
+      - name: Sign in to GCP (Workload Identity Federation, no key)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/447460690610/locations/global/workloadIdentityPools/github/providers/pitline' }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT || 'pitline-deploy@vitalos-workforce.iam.gserviceaccount.com' }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: 517.0.0
+      - name: Check the deploy identity
         run: |
-          python -m venv "$RUNNER_TEMP/az"
-          "$RUNNER_TEMP/az/bin/pip" install -q azure-cli==2.91.0
-          echo "$RUNNER_TEMP/az/bin" >> "$GITHUB_PATH"
-          echo "AZURE_CONFIG_DIR=$RUNNER_TEMP/azure-config" >> "$GITHUB_ENV"
-      - name: Sign in to Azure (deploy identity)
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" -o none
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-          az group show -n rg-autofix-superadmin --query "{name:name,location:location}" -o tsv
+          gcloud config set project "$GCP_PROJECT" --quiet
+          gcloud run services describe pitline-superadmin --region "$GCP_REGION" --format='value(metadata.name,status.conditions[0].status)'
 
       - name: Database connection strings
         env:
@@ -109,7 +104,7 @@ jobs:
           SUPERADMIN_AUTOFIX_DATABASE_URL: ${{ secrets.SUPERADMIN_AUTOFIX_DATABASE_URL }}
         run: |
           umask 077
-          superadmin/deploy/azure/deploy.sh existing-secrets "$RUNNER_TEMP/existing.env"
+          superadmin/deploy/cloudrun/deploy.sh existing-secrets "$RUNNER_TEMP/existing.env"
           # shellcheck disable=SC1091
           set -a; . "$RUNNER_TEMP/existing.env"; set +a
           if [[ -n "$SUPERADMIN_DATABASE_URL" && -n "$SUPERADMIN_AUTOFIX_DATABASE_URL" ]]; then
@@ -121,30 +116,29 @@ jobs:
             OUT_FILE="$RUNNER_TEMP/db.env" python superadmin/deploy/supabase_setup.py
           elif [[ -n "${EXISTING_DATABASE_URL:-}" && -n "${EXISTING_AUTOFIX_DATABASE_URL:-}" ]]; then
             printf 'DATABASE_URL=%s\nAUTOFIX_DATABASE_URL=%s\n' "$EXISTING_DATABASE_URL" "$EXISTING_AUTOFIX_DATABASE_URL" > "$RUNNER_TEMP/db.env"
-            echo "database: the container's current connection strings, unchanged"
+            echo "database: the connection strings in Secret Manager, unchanged"
           else
             echo "::error::No database logins yet: run superadmin/deploy/supabase_roles.sql in the Supabase SQL editor and add SUPERADMIN_DATABASE_URL and SUPERADMIN_AUTOFIX_DATABASE_URL as repository secrets (or add SUPABASE_ACCESS_TOKEN). superadmin/README.md, Deploy."
             exit 1
           fi
 
-      - name: Deploy to Azure Container Apps
+      - name: Deploy to Cloud Run
         env:
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           SENTRY_DSN: ${{ secrets.SUPERADMIN_SENTRY_DSN }}
           # The account Pitline records voicemails on (the same secrets the Vercel sync uses).
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           DB_ENV_FILE: ${{ runner.temp }}/db.env
           DEPLOY_OUT_FILE: ${{ runner.temp }}/deploy.env
-        run: superadmin/deploy/azure/deploy.sh apply
+        run: superadmin/deploy/cloudrun/deploy.sh apply
 
       - name: The origin answers only the proxy
         run: |
           origin="$(grep '^SUPERADMIN_ORIGIN=' "$RUNNER_TEMP/deploy.env" | cut -d= -f2-)"
           secret="$(grep '^SUPERADMIN_PROXY_SECRET=' "$RUNNER_TEMP/deploy.env" | cut -d= -f2-)"
           echo "::add-mask::$secret"
-          # Wake it from zero replicas.
+          # Wake it from zero instances. /healthz/ (with the slash) reaches the app; Cloud Run itself answers
+          # only the bare /healthz.
           for _ in $(seq 1 30); do curl -fsS -o /dev/null "$origin/healthz/" && break; sleep 5; done
           curl -fsS -o /dev/null "$origin/healthz/"
           test "$(curl -s -o /dev/null -w '%{http_code}' "$origin/superadmin/login/")" = 404
@@ -186,5 +180,4 @@ jobs:
         if: always()
         run: |
           rm -f "$RUNNER_TEMP/existing.env" "$RUNNER_TEMP/db.env" "$RUNNER_TEMP/deploy.env" "$RUNNER_TEMP/login.html"
-          az logout 2>/dev/null || true
-          rm -rf "$RUNNER_TEMP/azure-config" "$RUNNER_TEMP/docker-config"
+          rm -rf "$RUNNER_TEMP/docker-config"

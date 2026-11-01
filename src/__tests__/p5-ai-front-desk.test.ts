@@ -57,7 +57,7 @@ import { PlanRequiredError } from "@/lib/plans/entitlements";
 // ---------------------------------------------------------------------------
 
 const SECRET = "voice-relay-secret-0123456789-abcdefghij";
-const RELAY: VoiceRelayTarget = { url: "wss://autofix-voice.example.azurecontainerapps.io/relay", healthUrl: "https://autofix-voice.example.azurecontainerapps.io/healthz", secret: SECRET };
+const RELAY: VoiceRelayTarget = { url: "wss://pitline-voice-123456789012.europe-west2.run.app/relay", wakeUrl: "https://pitline-voice-123456789012.europe-west2.run.app/readyz", secret: SECRET };
 const GARAGE = "a0000000-0000-4000-8000-00000000000a";
 const CALL = "CA00000000000000000000000000000001";
 
@@ -65,7 +65,7 @@ describe("voice relay target and claim", () => {
   it("needs a wss:// URL without a query and a 32+ character secret", () => {
     expect(parseVoiceRelayTarget({ VOICE_RELAY_URL: RELAY.url, VOICE_RELAY_SECRET: ` ${SECRET} ` })).toEqual(RELAY);
     for (const [url, secret] of [
-      ["", SECRET], [RELAY.url, ""], [RELAY.url, "short"], ["https://autofix-voice.example/relay", SECRET],
+      ["", SECRET], [RELAY.url, ""], [RELAY.url, "short"], ["https://pitline-voice.example/relay", SECRET],
       [`${RELAY.url}?g=1`, SECRET], ["wss://user:pw@host/relay", SECRET], ["not a url", SECRET],
     ] as const) {
       expect(parseVoiceRelayTarget({ VOICE_RELAY_URL: url, VOICE_RELAY_SECRET: secret }), `${url} / ${secret.length}`).toBeNull();
@@ -256,7 +256,7 @@ describe("voice webhook: Pro with the AI front desk on answers missed calls", ()
     expect(state.textBacks).toEqual([]);
     expect(d.prewarmed).toEqual([]);
     await runAfter(d);
-    expect(d.prewarmed).toEqual([RELAY.healthUrl]);
+    expect(d.prewarmed).toEqual([RELAY.wakeUrl]);
   });
 
   it("after the garage's phone goes unanswered the call goes to the AI front desk", async () => {
@@ -267,7 +267,7 @@ describe("voice webhook: Pro with the AI front desk on answers missed calls", ()
     expect(xml).toContain("<ConversationRelay ");
     expect(state.textBacks).toEqual([]);
     await runAfter(d);
-    expect(d.prewarmed).toEqual([RELAY.healthUrl]);
+    expect(d.prewarmed).toEqual([RELAY.wakeUrl]);
   });
 
   it("a failed session (service down) falls back to the voicemail and the text-back, once", async () => {
