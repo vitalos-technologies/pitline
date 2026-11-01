@@ -28,7 +28,7 @@ function subscriptionEvent(type: string, overrides: Record<string, unknown> = {}
   });
 }
 
-describe("billing provider selection (test mode unless STRIPE_LIVE_MODE, D26)", () => {
+describe("billing provider selection (test mode unless STRIPE_LIVE_MODE, D27)", () => {
   it("uses the mock unless Stripe is fully configured with a test key", () => {
     expect(getBillingReadiness({})).toBe("mock");
     expect(getBillingProvider({}).kind).toBe("mock");
@@ -152,7 +152,7 @@ describe("Stripe webhooks", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sk_test_abc");
   });
 
-  it("card first (D26): the chosen plan, the free month as the Stripe trial, £0 today", async () => {
+  it("card first (D27): the chosen plan, the free month as the Stripe trial, £0 today", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/pay/cs_test_2" }), { status: 200 }));
     const provider = createStripeBillingProvider(config, fetcher as unknown as typeof fetch);
     const now = new Date("2026-10-30T12:00:00Z");
@@ -176,7 +176,7 @@ describe("Stripe webhooks", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
-  it("uses Stripe Tax at Checkout only when VAT is collected (D26)", async () => {
+  it("uses Stripe Tax at Checkout only when VAT is collected (D27)", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/pay/cs_test_1" }), { status: 200 }));
     const withVat = createStripeBillingProvider({ ...config, collectVat: true }, fetcher as unknown as typeof fetch);
     await withVat.startUpgrade({ garage: { id: GARAGE, name: "G", email: null }, customerRef: "cus_1", successUrl: "https://a", cancelUrl: "https://a" });

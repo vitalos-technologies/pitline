@@ -1,4 +1,4 @@
--- One-month free trial (DECISIONS D25: Pitline is a new company, so new garages
+-- One-month free trial (DECISIONS D26: Pitline is a new company, so new garages
 -- get Pro free for one calendar month instead of 14 days). This migration:
 --
 --   garages.trial_ends_at default
@@ -23,9 +23,9 @@ alter table public.garages
   alter column trial_ends_at set default (now() + interval '1 month');
 
 comment on column public.garages.plan is
-  'essentials or pro (D17). pro with trial_ends_at set is the one-month Pro trial (D25). Use garage_effective_plan() for what the garage may use now.';
+  'essentials or pro (D17). pro with trial_ends_at set is the one-month Pro trial (D26). Use garage_effective_plan() for what the garage may use now.';
 comment on column public.garages.trial_ends_at is
-  'End of the Pro trial; null when not on trial. New garages get now() + 1 month (D25).';
+  'End of the Pro trial; null when not on trial. New garages get now() + 1 month (D26).';
 
 update public.garages g
    set trial_ends_at = g.created_at + interval '1 month'

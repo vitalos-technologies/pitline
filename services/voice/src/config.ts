@@ -1,4 +1,4 @@
-// Environment for the voice service. Secrets come from Azure Container App secrets (secretref:) and are
+// Environment for the voice service. Secrets come from Secret Manager (Cloud Run secret references) and are
 // never logged. Missing ANTHROPIC_API_KEY or VOICE_RELAY_SECRET leaves /readyz at 503 and refuses calls,
 // so Pitline's webhook falls back to the voicemail (Twilio reports the failed session).
 

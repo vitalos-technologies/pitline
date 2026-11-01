@@ -10,11 +10,11 @@ export type BillingReadiness =
   /** Default: no Stripe; upgrades are requests to Vitalos. */
   | "mock"
   | "stripe_test"
-  /** STRIPE_LIVE_MODE=true with a live key (D26). */
+  /** STRIPE_LIVE_MODE=true with a live key (D27). */
   | "stripe_live"
   /** BILLING_PROVIDER=stripe but a key, price or webhook secret is missing. */
   | "configuration_required"
-  /** A live key without STRIPE_LIVE_MODE=true: refused, as before D26. */
+  /** A live key without STRIPE_LIVE_MODE=true: refused, as before D27. */
   | "live_key_refused"
   /** STRIPE_LIVE_MODE=true with a test key: refused, so live mode is never half set up. */
   | "test_key_refused";
@@ -23,12 +23,12 @@ const TEST_KEY = /^(sk|rk)_test_[A-Za-z0-9]+$/;
 const LIVE_KEY = /^(sk|rk)_live_[A-Za-z0-9]+$/;
 const PRICE = /^price_[A-Za-z0-9]+$/;
 
-/** STRIPE_LIVE_MODE=true switches Pitline's own billing to live keys (D26). Anything else is test mode. */
+/** STRIPE_LIVE_MODE=true switches Pitline's own billing to live keys (D27). Anything else is test mode. */
 export function stripeLiveMode(env: Env = process.env): boolean {
   return env.STRIPE_LIVE_MODE?.trim().toLowerCase() === "true";
 }
 
-/** BILLING_COLLECT_VAT=true makes Checkout add VAT with Stripe Tax (D26). Default off: Vitalos is not VAT registered yet. */
+/** BILLING_COLLECT_VAT=true makes Checkout add VAT with Stripe Tax (D27). Default off: Vitalos is not VAT registered yet. */
 export function billingCollectsVat(env: Env = process.env): boolean {
   return env.BILLING_COLLECT_VAT?.trim().toLowerCase() === "true";
 }
@@ -69,7 +69,7 @@ export function billingSelfServe(readiness: BillingReadiness): boolean {
   return readiness === "stripe_test" || readiness === "stripe_live";
 }
 
-/** True when Stripe Checkout adds VAT, so the payment step may say so (D26). */
+/** True when Stripe Checkout adds VAT, so the payment step may say so (D27). */
 export function checkoutAddsVat(env: Env = process.env): boolean {
   return readStripeBillingConfig(env).config?.collectVat === true;
 }

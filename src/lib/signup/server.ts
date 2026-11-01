@@ -72,7 +72,7 @@ export function createGarageError(message: string | null | undefined): Extract<C
 
 /**
  * Creates the garage for `user` and selects it (`af_garage`), so the owner lands in it.
- * Also stores the owner's display name as their admin profile, and the plan they chose (D26): one
+ * Also stores the owner's display name as their admin profile, and the plan they chose (D27): one
  * month free on it (the trial_ends_at default). `plan_chosen` stays empty until billing confirms it,
  * so an unpaid Pro month still ends on Essentials. With Stripe billing on, the garage is card first.
  */

@@ -19,7 +19,7 @@ export type PlanConfig = {
 export type PlansConfig = Record<Plan, PlanConfig> & {
   /** Monthly price of each site beyond the first (multi-site, Pro). PLACEHOLDER until set. */
   extraSitePricePence: number | null;
-  /** Length of the Pro trial for new garages, in calendar months (D25: one month, as a new company). The
+  /** Length of the Pro trial for new garages, in calendar months (D26: one month, as a new company). The
    *  database default matches (garages.trial_ends_at = now() + interval '1 month'). */
   trialMonths: number;
 };

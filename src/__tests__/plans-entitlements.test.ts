@@ -143,7 +143,7 @@ describe("plans: prices and allowances are placeholders until Temitope sets them
   });
 });
 
-describe("the free month on either plan (D26)", () => {
+describe("the free month on either plan (D27)", () => {
   const now = new Date("2026-10-30T12:00:00Z");
   const essentialsMonth = { plan: "essentials", trialEndsAt: "2026-11-30T12:00:00Z", planChosen: null };
 

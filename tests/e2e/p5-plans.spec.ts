@@ -3,7 +3,7 @@
  * production build and local Supabase. Billing runs on the mock provider (BILLING_PROVIDER unset), so
  * "Upgrade" is "Request Pro".
  *
- * The spec makes its own garages (new garages start on the one-month Pro trial, D25), an owner and a manager with
+ * The spec makes its own garages (new garages start on the one-month Pro trial, D26), an owner and a manager with
  * verified TOTP, and removes them afterwards. Checks: the trial and its days left, Request Pro (a plan request
  * for Vitalos), moving to Essentials (confirmation, trial ends, plan label), the manager's read-only view with
  * usage, an expired trial counting as Essentials before the expiry job and the job moving it, axe with no

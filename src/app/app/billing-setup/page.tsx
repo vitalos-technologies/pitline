@@ -25,7 +25,7 @@ function longDate(iso: string | null | undefined) {
 }
 
 /**
- * Finish setting up billing (D26). A card-first garage (garages.card_required) lands here from any admin
+ * Finish setting up billing (D27). A card-first garage (garages.card_required) lands here from any admin
  * page until its subscription is trialing, active or past_due: after sign-up, after closing Checkout
  * without a card, and if the subscription later ends. The owner picks the plan and adds a card in Stripe
  * Checkout (£0.00 today while the free month lasts); anyone else is told to ask the owner.

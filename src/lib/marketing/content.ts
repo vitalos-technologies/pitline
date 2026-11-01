@@ -97,8 +97,8 @@ export const marketing = {
 
   // Two plans (DECISIONS D17). Essentials is what ships today. Pro lists its features; `shipped: false` marks
   // the ones still being built ("Coming soon"), so the page only claims what Pitline does. Every new garage
-  // gets one month free on the plan it picks (D25, D26), with a card added up front and nothing charged until
-  // the month ends. Prices set by Temitope on 29 Oct 2026; VAT is never shown here (D26); keep them in step with PLAN_ESSENTIALS_PRICE_PENCE, PLAN_PRO_PRICE_PENCE and PLAN_EXTRA_SITE_PRICE_PENCE.
+  // gets one month free on the plan it picks (D26, D27), with a card added up front and nothing charged until
+  // the month ends. Prices set by Temitope on 29 Oct 2026; VAT is never shown here (D27); keep them in step with PLAN_ESSENTIALS_PRICE_PENCE, PLAN_PRO_PRICE_PENCE and PLAN_EXTRA_SITE_PRICE_PENCE.
   plans: {
     id: "plans",
     heading: "Two plans",

@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getAdminContext } from "@/lib/tenancy/admin";
 import { adminUrl } from "@/lib/tenancy/urls";
 
-// Finish setting up billing (D26): the owner, MFA verified, sends the garage through Stripe Checkout
+// Finish setting up billing (D27): the owner, MFA verified, sends the garage through Stripe Checkout
 // for the plan they pick here. The garage is the member's selected garage; the form carries only the plan.
 
 export async function startBillingSetupAction(formData: FormData) {

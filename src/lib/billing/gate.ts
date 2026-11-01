@@ -3,7 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
 import { billingSelfServe, getBillingReadiness } from "./index";
 
-// Card first (D26): a garage that signed up under D26 (garages.card_required) uses the admin only
+// Card first (D27): a garage that signed up under D27 (garages.card_required) uses the admin only
 // while its subscription, or its group home garage's, is trialing, active or past_due. Until then it
 // stays on /app/billing-setup. Nothing is gated while billing is the mock (Stripe not configured).
 

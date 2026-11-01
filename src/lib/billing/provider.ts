@@ -1,9 +1,9 @@
 // Billing provider interface (P5.2): how a garage pays Vitalos for its plan and extra sites. Two
-// implementations: Stripe Billing (./stripe.ts; test mode unless STRIPE_LIVE_MODE=true, D26) and a
+// implementations: Stripe Billing (./stripe.ts; test mode unless STRIPE_LIVE_MODE=true, D27) and a
 // mock (./mock.ts) used while Stripe is not configured. With the mock, "Upgrade" becomes "Request Pro": the request is
 // recorded (plan_requests) and Vitalos sees it in /admin; a platform admin then sets the plan.
 //
-// A live Stripe key is refused unless STRIPE_LIVE_MODE=true, and a test key is refused when it is (D26).
+// A live Stripe key is refused unless STRIPE_LIVE_MODE=true, and a test key is refused when it is (D27).
 
 export type BillingProviderKind = "mock" | "stripe";
 
@@ -38,7 +38,7 @@ export interface BillingProvider {
   readonly kind: BillingProviderKind;
   /**
    * Checkout for a plan (default Pro), card always collected. `trialEndsAt` (the garage's free month,
-   * D26) becomes the provider's trial, so nothing is charged until then. `customerRef` reuses a customer.
+   * D27) becomes the provider's trial, so nothing is charged until then. `customerRef` reuses a customer.
    */
   startUpgrade(input: {
     garage: BillingGarage;

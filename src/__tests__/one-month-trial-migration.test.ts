@@ -7,7 +7,7 @@ const FILE = "20261030000100_one_month_trial.sql";
 const source = readFileSync(join(process.cwd(), "supabase", "migrations", FILE), "utf8");
 const statements = sqlStatements(source);
 
-describe("one-month free trial migration (DECISIONS D25)", () => {
+describe("one-month free trial migration (DECISIONS D26)", () => {
   it("runs after the plans and multi-site migrations it builds on", () => {
     expect(migrationFiles).toContain(FILE);
     expect(migrationFiles.indexOf(FILE)).toBeGreaterThan(migrationFiles.indexOf("20261029000900_multi_site.sql"));
@@ -37,7 +37,7 @@ describe("one-month free trial migration (DECISIONS D25)", () => {
   });
 });
 
-describe("card-first billing migration (DECISIONS D26)", () => {
+describe("card-first billing migration (DECISIONS D27)", () => {
   const cardFirst = sqlStatements(readFileSync(join(process.cwd(), "supabase", "migrations", "20261030000200_card_first_billing.sql"), "utf8"));
 
   it("adds card_required, false for every garage that exists today", () => {

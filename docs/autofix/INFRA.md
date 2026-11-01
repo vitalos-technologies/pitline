@@ -43,13 +43,13 @@ Askbridge (P4.6, [askbridge.md](askbridge.md)): no secrets; each garage pastes i
 
 Security headers (P4.3): `X-Frame-Options` and `Content-Security-Policy` are set per host in `src/proxy.ts` (not `next.config.ts`): admin host `SAMEORIGIN` + `frame-ancestors 'self'`; garage booking hosts a CSP whose `frame-ancestors` lists the garage's allowed sites and whose script and connect sources add the Askbridge loader's origin only when that garage has the chat on.
 
-Plans and billing (P5.2, D17, D19): `BILLING_PROVIDER` (`mock` default, or `stripe`), `STRIPE_LIVE_MODE` (D26: `true` accepts only live keys and live events; otherwise test keys only and a live key is refused, falling back to the mock), `STRIPE_SECRET_KEY` (a **repo-level** secret on vitalos-technologies/pitline, which overrides the org one), `STRIPE_BILLING_WEBHOOK_SECRET` (`whsec_…` of the endpoint `https://pitline.co.uk/api/webhooks/billing/stripe`, events `checkout.session.completed`, `customer.subscription.created/updated/deleted`), `STRIPE_PRICE_ESSENTIALS`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_EXTRA_SITE` (prices and keys Sensitive, server only), `BILLING_COLLECT_VAT` (D26: `true` turns on Stripe Tax at Checkout; `false` while Vitalos is not VAT registered). Price and allowance placeholders until Temitope sets them: `PLAN_ESSENTIALS_PRICE_PENCE`, `PLAN_PRO_PRICE_PENCE`, `PLAN_ESSENTIALS_SMS_ALLOWANCE`, `PLAN_PRO_SMS_ALLOWANCE`, `PLAN_PRO_AI_MINUTES`, `PLAN_EXTRA_SITE_PRICE_PENCE` (empty = "to be confirmed"). `USAGE_METERING=off` stops recording usage. None of these exist in Vercel or the repo secrets yet (checked 28 Oct 2026).
+Plans and billing (P5.2, D17, D19): `BILLING_PROVIDER` (`mock` default, or `stripe`), `STRIPE_LIVE_MODE` (D27: `true` accepts only live keys and live events; otherwise test keys only and a live key is refused, falling back to the mock), `STRIPE_SECRET_KEY` (a **repo-level** secret on vitalos-technologies/pitline, which overrides the org one), `STRIPE_BILLING_WEBHOOK_SECRET` (`whsec_…` of the endpoint `https://pitline.co.uk/api/webhooks/billing/stripe`, events `checkout.session.completed`, `customer.subscription.created/updated/deleted`), `STRIPE_PRICE_ESSENTIALS`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_EXTRA_SITE` (prices and keys Sensitive, server only), `BILLING_COLLECT_VAT` (D27: `true` turns on Stripe Tax at Checkout; `false` while Vitalos is not VAT registered). Price and allowance placeholders until Temitope sets them: `PLAN_ESSENTIALS_PRICE_PENCE`, `PLAN_PRO_PRICE_PENCE`, `PLAN_ESSENTIALS_SMS_ALLOWANCE`, `PLAN_PRO_SMS_ALLOWANCE`, `PLAN_PRO_AI_MINUTES`, `PLAN_EXTRA_SITE_PRICE_PENCE` (empty = "to be confirmed"). `USAGE_METERING=off` stops recording usage. None of these exist in Vercel or the repo secrets yet (checked 28 Oct 2026).
 
 Added: see `.autofix/env.autofix.example` (appended to `.env.example` by `/bootstrap`).
 
 Django super admin (P5.1, `superadmin/`, its own container; see `superadmin/.env.example`): `DJANGO_SECRET_KEY`, `DATABASE_URL` (its own Postgres 17), `AUTOFIX_DATABASE_URL` (Pitline Supabase as `autofix_superadmin`: session pooler, user `autofix_superadmin.<project-ref>`, `sslmode=require`; the role's password is set out of band with `alter role autofix_superadmin with login password '…'`, never in a migration), `AUTOFIX_STATUS_TOKEN` (32+ characters, shared with the Vitalos platform's Product Pipeline), `AUTOFIX_APP_URL` (`https://pitline.co.uk`), `AUTOFIX_SUPERADMIN_URL` (`https://pitline.co.uk/superadmin`, not live), `SUPERADMIN_PATH_PREFIX` (`/superadmin`), `SUPERADMIN_PROXY_SECRET` (32+ characters, the same value as Vercel's), `ALLOWED_HOSTS` (`pitline.co.uk`), `CSRF_TRUSTED_ORIGINS` (`https://pitline.co.uk`), `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD`, `PRIMARY_OWNER_EMAIL`, `SENTRY_DSN`. None of these are Vercel variables. Vercel (Pitline project) needs two for the `/superadmin` proxy (D18): `SUPERADMIN_ORIGIN` (the container's own https address) and `SUPERADMIN_PROXY_SECRET` (Sensitive); without them `/superadmin` is a 404.
 
-Django super admin deploy (D18, A416, A417): `.github/workflows/superadmin-deploy.yml` (run by hand) builds `ghcr.io/vitalos-technologies/autofix-superadmin` (private), prepares Pitline's Supabase project (role and schema `superadmin_app`, `autofix_superadmin` login) over the Management API, deploys Azure Container Apps `autofix-superadmin` in `rg-autofix-superadmin` (UK South, consumption plan, scale to zero, jobs `autofix-superadmin-release` and `autofix-superadmin-notify`), then sets Vercel's `SUPERADMIN_ORIGIN` and `SUPERADMIN_PROXY_SECRET` (Production) and redeploys. Repository secrets: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `GHCR_PULL_TOKEN`, `VERCEL_API_TOKEN`, and either `SUPERADMIN_DATABASE_URL` + `SUPERADMIN_AUTOFIX_DATABASE_URL` (from `superadmin/deploy/supabase_roles.sql`, A418) or `SUPABASE_ACCESS_TOKEN`. The container's own secrets (Django key, connection strings, proxy secret, status token, bootstrap password) are generated by the deploy and kept in Azure. Steps: `superadmin/README.md`, "Deploy".
+Django super admin deploy (D18, A416, A417, D25): `.github/workflows/superadmin-deploy.yml` (run by hand) builds `ghcr.io/vitalos-technologies/autofix-superadmin` (private), prepares Pitline's Supabase project (role and schema `superadmin_app`, `autofix_superadmin` login) over the Management API when asked, deploys to Cloud Run (see "Cloud Run" below: release job `pitline-superadmin-release`, service `pitline-superadmin`, job `pitline-superadmin-notify` started every 5 minutes by Cloud Scheduler), checks the origin answers 404 without the proxy secret and 200 with it, then sets Vercel's `SUPERADMIN_ORIGIN` (`https://pitline-superadmin-447460690610.europe-west2.run.app`) and `SUPERADMIN_PROXY_SECRET` (Production) and redeploys. Repository secrets: `VERCEL_API_TOKEN`, and optionally `SUPERADMIN_DATABASE_URL` + `SUPERADMIN_AUTOFIX_DATABASE_URL` (from `superadmin/deploy/supabase_roles.sql`, A418) or `SUPABASE_ACCESS_TOKEN` to replace the connection strings. The container's own secrets are kept in Secret Manager. Steps: `superadmin/README.md`, "Deploy". Until 1 Nov 2026 this deployed to Azure Container Apps `autofix-superadmin` in `rg-autofix-superadmin` with `AZURE_*` and `GHCR_PULL_TOKEN` secrets, which are no longer used.
 
 ## Jobs and crons (P3.7)
 
@@ -64,7 +64,60 @@ Without Pro an external scheduler can call `POST /api/jobs/drain` (or `GET /api/
 
 Twilio webhooks (P3.8): `POST /api/webhooks/twilio/{sms,whatsapp,status,voice}` on the admin host. Behind a proxy that rewrites the host, set `TWILIO_WEBHOOK_BASE_URL`, otherwise the signature check rebuilds the URL from `X-Forwarded-Proto` and `X-Forwarded-Host` (first value), then `Host`. A number only routes once its `garage_phone_numbers` row has `provider_sid` (A55). Pitline's own line (A420): numbers in `AUTOFIX_PLATFORM_VOICE_NUMBERS` (E.164, comma-separated, a plain variable; GitHub repository variable of the same name, synced by `vercel-env.yml`) are answered on the voice webhook in Pitline's name and go to voicemail, stored in `platform_calls`. Point the number's "A call comes in" at `https://pitline.co.uk/api/webhooks/twilio/voice` (HTTP POST). The number must be on the Twilio account whose `TWILIO_AUTH_TOKEN` the app holds, or the signature check refuses its calls (403), and on the account of `TWILIO_ACCOUNT_SID`, or the super admin cannot play its voicemails.
 
-Voice desk (D20, [voice-desk.md](voice-desk.md)): Azure Container App `autofix-voice` in `rg-autofix-superadmin` / `cae-autofix-superadmin` (UK South, scale to zero, image `ghcr.io/vitalos-technologies/autofix-voice`), deployed by Actions > Voice desk deploy. Vercel (Production): `VOICE_RELAY_URL` (`wss://<container host>/relay`) and `VOICE_RELAY_SECRET` (Sensitive), both set by that workflow. Container secrets: `voice-relay-secret` (generated once), `anthropic-api-key` (repository secret `ANTHROPIC_API_KEY`), optional `twilio-auth-token`. Twilio ConversationRelay needs no account setting beyond a number with voice pointed at `/api/webhooks/twilio/voice`.
+Voice desk (D20, D25, [voice-desk.md](voice-desk.md)): Cloud Run service `pitline-voice` (see "Cloud Run" below; scale to zero, timeout 3600 s so a call's socket can stay open, session affinity, image `ghcr.io/vitalos-technologies/autofix-voice` through the mirror), deployed by Actions > Voice desk deploy. Vercel (Production): `VOICE_RELAY_URL` (`wss://pitline-voice-447460690610.europe-west2.run.app/relay`) and `VOICE_RELAY_SECRET` (Sensitive), both set by that workflow. The voice webhook wakes the service by fetching `/readyz` while the disclosure plays: Cloud Run answers `/healthz` itself (404) and never passes it to the container. Secret Manager: `pitline-voice--voice-relay-secret` (kept), `pitline-voice--anthropic-api-key` (repository secret `ANTHROPIC_API_KEY` when given), `pitline-voice--twilio-auth-token`. Twilio ConversationRelay needs no account setting beyond a number with voice pointed at `/api/webhooks/twilio/voice`.
+
+## Cloud Run (GCP, since 1 Nov 2026)
+
+Pitline's containers moved from Azure Container Apps to Cloud Run when the Azure credit ran out (DECISIONS D25). `migrate.sh stage pitline` (outside this repository) copied the apps, their settings and their secrets; `migrate.sh cutover pitline` points Vercel at Cloud Run, and voice moves with `MOVE_VOICE=1` once this repository's `/readyz` wake is live. From then on the two deploy workflows deploy here.
+
+| What | Name | Detail |
+| --- | --- | --- |
+| Project, region | `vitalos-workforce` (number `447460690610`), `europe-west2` (London) | |
+| Super admin | service `pitline-superadmin` | public (the app answers 404 without the proxy secret), port 8000, 0-1 instances, 1 vCPU / 512 MiB, concurrency 50, timeout 300 s |
+| Voice desk | service `pitline-voice` | public (the relay needs a signed claim), port 8080, 0-2 instances, 1 vCPU / 512 MiB, concurrency 20, timeout 3600 s, session affinity |
+| Jobs | `pitline-superadmin-release` (run by every deploy), `pitline-superadmin-notify` | 1 vCPU / 512 MiB, task timeout 900 s, no retries |
+| Schedule | Cloud Scheduler `pitline-superadmin-notify` | `*/5 * * * *` UTC, POSTs the job's `:run` as `apps-scheduler@vitalos-workforce.iam.gserviceaccount.com` (which has `roles/run.invoker` on the job). A deploy keeps its paused or enabled state: it was created paused and `migrate.sh cutover` resumes it |
+| Images | Artifact Registry remote repository `ghcr` | `europe-west2-docker.pkg.dev/vitalos-workforce/ghcr/vitalos-technologies/autofix-{superadmin,voice}:<sha>` pulls through from the private `ghcr.io` packages with secret `ghcr-pull-token` |
+| Secrets | Secret Manager, `<service>--<the Azure secret name>`, London only | `pitline-superadmin--{django-secret-key, database-url, autofix-database-url, superadmin-proxy-secret, autofix-status-token, bootstrap-admin-password, twilio-account-sid, twilio-auth-token}`, `pitline-voice--{voice-relay-secret, anthropic-api-key, twilio-auth-token}`; the jobs use the super admin's |
+| Runtime identity | `apps-runtime@vitalos-workforce.iam.gserviceaccount.com` | `roles/secretmanager.secretAccessor` on each of those secrets |
+| Deploy identity | `pitline-deploy@vitalos-workforce.iam.gserviceaccount.com` | GitHub Actions signs in as it with Workload Identity Federation (pool `github`, provider `pitline`); no key exists. Repository variables `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_DEPLOY_SERVICE_ACCOUNT` override the workflows' defaults |
+
+The deploys only add versions to secrets that exist; they never create a secret or change IAM. A new secret (for example `pitline-superadmin--sentry-dsn`, used when the repository secret `SUPERADMIN_SENTRY_DSN` is set) is created once by a project owner with `gcloud secrets create <name> --replication-policy=user-managed --locations=europe-west2` and `gcloud secrets add-iam-policy-binding <name> --member serviceAccount:apps-runtime@vitalos-workforce.iam.gserviceaccount.com --role roles/secretmanager.secretAccessor`; until then the deploy skips it.
+
+### One-time setup (a project owner, in Cloud Shell)
+
+Run once before the first deploy from GitHub. Only `main` of `vitalos-technologies/pitline` (repository id `1432882149`), from the two deploy workflows, can sign in.
+
+```bash
+PROJECT=vitalos-workforce NUM=447460690610 SA=pitline-deploy@vitalos-workforce.iam.gserviceaccount.com
+gcloud config set project $PROJECT
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
+gcloud iam workload-identity-pools create github --location global --display-name "GitHub Actions"
+gcloud iam workload-identity-pools providers create-oidc pitline --location global --workload-identity-pool github \
+  --display-name "vitalos-technologies/pitline" --issuer-uri https://token.actions.githubusercontent.com \
+  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_id=assertion.repository_id" \
+  --attribute-condition "assertion.repository_id == '1432882149' && assertion.ref == 'refs/heads/main' && (assertion.workflow_ref.startsWith('vitalos-technologies/pitline/.github/workflows/superadmin-deploy.yml@') || assertion.workflow_ref.startsWith('vitalos-technologies/pitline/.github/workflows/voice-deploy.yml@'))"
+gcloud iam service-accounts create pitline-deploy --display-name "Pitline deploy (GitHub Actions)"
+gcloud iam service-accounts add-iam-policy-binding $SA --role roles/iam.workloadIdentityUser \
+  --member "principalSet://iam.googleapis.com/projects/$NUM/locations/global/workloadIdentityPools/github/attribute.repository_id/1432882149"
+# Deploy revisions of the services and jobs and run the release job (project-wide: Cloud Run has no name-prefix condition).
+gcloud projects add-iam-policy-binding $PROJECT --member serviceAccount:$SA --role roles/run.developer --condition None
+# Run them as the runtime account; point the schedule at the scheduler account.
+for runas in apps-runtime apps-scheduler; do
+  gcloud iam service-accounts add-iam-policy-binding $runas@$PROJECT.iam.gserviceaccount.com \
+    --member serviceAccount:$SA --role roles/iam.serviceAccountUser
+done
+gcloud projects add-iam-policy-binding $PROJECT --member serviceAccount:$SA --role roles/cloudscheduler.admin --condition None
+# Read and add versions of pitline-* secrets only.
+for role in roles/secretmanager.secretAccessor roles/secretmanager.secretVersionAdder; do
+  gcloud projects add-iam-policy-binding $PROJECT --member serviceAccount:$SA --role $role \
+    --condition "expression=resource.name.startsWith('projects/$NUM/secrets/pitline-'),title=pitline-secrets-only"
+done
+gcloud artifacts repositories add-iam-policy-binding ghcr --location europe-west2 \
+  --member serviceAccount:$SA --role roles/artifactregistry.reader
+```
+
+Then run **Voice desk deploy** with `CHECK`: its "Check the deploy identity" step proves the sign-in without deploying anything.
 
 ## Local development
 

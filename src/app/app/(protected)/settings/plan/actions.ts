@@ -29,7 +29,7 @@ function note(formData: FormData) {
 /**
  * Upgrade to Pro. With a card on file (a trialing, active or past_due Stripe subscription) the
  * subscription moves to the Pro price; otherwise Stripe Checkout (any free month left carries over,
- * D26) when billing is configured, or a plan request Vitalos sees in /admin ("Request Pro").
+ * D27) when billing is configured, or a plan request Vitalos sees in /admin ("Request Pro").
  */
 export async function upgradeToProAction(formData: FormData) {
   const admin = await ownerContext();
@@ -94,7 +94,7 @@ export async function switchToEssentialsAction(formData: FormData) {
   redirect(`${PATH}?done=plan_changing`);
 }
 
-/** Cancel before renewal (D26): the subscription ends with the current period or free month, with no charge after. Or undo it. */
+/** Cancel before renewal (D27): the subscription ends with the current period or free month, with no charge after. Or undo it. */
 export async function setCancelAtPeriodEndAction(formData: FormData) {
   const admin = await ownerContext();
   const cancel = formData.get("cancel") === "yes";

@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { BillingProvider, SubscriptionState, SubscriptionStatus } from "./provider";
 
 // Stripe Billing for Pitline's own plans (P5.2), over Stripe's REST API with fetch (no SDK). Test mode
-// unless STRIPE_LIVE_MODE=true (D26). Checkout (mode=subscription, card always collected, the garage's
-// free month as the Stripe trial: D26) for either plan, plan changes and cancel-at-period-end on the
+// unless STRIPE_LIVE_MODE=true (D27). Checkout (mode=subscription, card always collected, the garage's
+// free month as the Stripe trial: D27) for either plan, plan changes and cancel-at-period-end on the
 // subscription, the customer portal, a quantity line for extra sites, and signed webhooks (`Stripe-Signature`, HMAC-SHA-256 over "<t>.<raw body>", 5-minute
 // tolerance). The garage id travels as `client_reference_id` and subscription metadata `garage_id`,
 // and is checked against our own row by apply_billing_subscription(); never a registration or email.
@@ -15,9 +15,9 @@ export type StripeBillingConfig = {
   /** Essentials monthly price; null until stripe-setup has created it (Essentials checkout is then unavailable). */
   essentialsPriceId: string | null;
   extraSitePriceId: string | null;
-  /** STRIPE_LIVE_MODE=true: only live keys, and only live events are applied (D26). */
+  /** STRIPE_LIVE_MODE=true: only live keys, and only live events are applied (D27). */
   liveMode: boolean;
-  /** BILLING_COLLECT_VAT=true: Checkout adds VAT with Stripe Tax (D26). Prices are ex-VAT (tax_behavior exclusive). */
+  /** BILLING_COLLECT_VAT=true: Checkout adds VAT with Stripe Tax (D27). Prices are ex-VAT (tax_behavior exclusive). */
   collectVat: boolean;
 };
 
@@ -157,7 +157,7 @@ export function createStripeBillingProvider(config: StripeBillingConfig, fetcher
           "subscription_data[trial_settings][end_behavior][missing_payment_method]": trial ? "cancel" : undefined,
           customer: customerRef ?? undefined,
           customer_email: customerRef ? undefined : garage.email ?? undefined,
-          // VAT only where the garage pays, and only once Vitalos collects it (D26).
+          // VAT only where the garage pays, and only once Vitalos collects it (D27).
           "automatic_tax[enabled]": vat ? "true" : undefined,
           "tax_id_collection[enabled]": vat ? "true" : undefined,
           "customer_update[address]": vat && customerRef ? "auto" : undefined,
@@ -235,7 +235,7 @@ export function createStripeBillingProvider(config: StripeBillingConfig, fetcher
       const eventId = typeof event.id === "string" ? event.id : "";
       const type = typeof event.type === "string" ? event.type : "";
       if (!eventId || !type) return null;
-      // Only events of the mode we run in are applied: a test event never changes a live garage (D26).
+      // Only events of the mode we run in are applied: a test event never changes a live garage (D27).
       if (Boolean(event.livemode) !== config.liveMode) return { kind: "ignored", eventId, type };
       if (type.startsWith("customer.subscription.") && event.data?.object) {
         const state = subscriptionState(event.data.object, config);

@@ -29,9 +29,9 @@ export type GarageWizardProps = {
   /** The free link with `__slug__` where the slug goes, e.g. `https://__slug__.pitline.co.uk`. */
   linkTemplate: string;
   ownerEmail: string;
-  /** The two plans with their monthly price, e.g. "£20 a month" (D26: both start with one month free). */
+  /** The two plans with their monthly price, e.g. "£20 a month" (D27: both start with one month free). */
   plans: { id: "essentials" | "pro"; name: string; price: string; detail: string }[];
-  /** Stripe billing is on: a card is added after sign-up, nothing charged today (D26). */
+  /** Stripe billing is on: a card is added after sign-up, nothing charged today (D27). */
   cardFirst: boolean;
 };
 

@@ -45,7 +45,7 @@ export function trialDaysLeft(state: PlanState, now: Date = new Date()): number 
   return Math.max(1, Math.ceil(((time(state.trialEndsAt) as number) - now.getTime()) / DAY_MS));
 }
 
-/** Whole days left in the free month on either plan (D26), rounded up; 0 when it has ended or there is none. */
+/** Whole days left in the free month on either plan (D27), rounded up; 0 when it has ended or there is none. */
 export function freeDaysLeft(state: PlanState, now: Date = new Date()): number {
   const ends = time(state.trialEndsAt);
   if (ends === null || ends <= now.getTime()) return 0;
@@ -54,7 +54,7 @@ export function freeDaysLeft(state: PlanState, now: Date = new Date()): number {
 
 /**
  * The label under the garage name in the switcher: "Pro trial · 9 days left", "Essentials · 9 free days
- * left" (the free month on Essentials, D26), "Pro", "Essentials".
+ * left" (the free month on Essentials, D27), "Pro", "Essentials".
  */
 export function planLabel(state: PlanState, now: Date = new Date()): string {
   if (isOnTrial(state, now)) {

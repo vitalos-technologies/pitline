@@ -80,7 +80,7 @@ export default async function PlanSettingsPage({ searchParams }: { searchParams:
   ]);
   const openRequest = (request.data ?? null) as { requested_plan: string; created_at: string } | null;
   const paidByCard = subscription?.provider === "stripe" && subscriptionKeepsAdminOpen(subscription.status);
-  // D26: what the card is charged next, and when (Stripe's period end is the end of the free month while trialing).
+  // D27: what the card is charged next, and when (Stripe's period end is the end of the free month while trialing).
   const nextCharge = paidByCard && subscription?.current_period_end ? formatDate(subscription.current_period_end, garage.timezone) : null;
   const subscribedPlan = subscription?.plan === "pro" ? "pro" : "essentials";
   const nextChargePence = config[subscribedPlan].monthlyPricePence;
@@ -188,7 +188,7 @@ export default async function PlanSettingsPage({ searchParams }: { searchParams:
                     <SubmitButton className={buttonClass("primary", "md", "w-full sm:w-fit")} disabled={!canChange}>
                       {selfServe ? (onTrial ? "Choose Pro" : "Upgrade to Pro") : openRequest ? "Send the request again" : "Request Pro"}
                     </SubmitButton>
-                    {/* VAT appears only where the garage pays, and only while Vitalos collects it (D26). */}
+                    {/* VAT appears only where the garage pays, and only while Vitalos collects it (D27). */}
                     {selfServe && addsVat && !paidByCard ? <p className="m-0 text-[13px] text-grey-700">VAT is added at checkout.</p> : null}
                     {!selfServe ? <p className="m-0 text-[13px] text-grey-700">Vitalos switches Pro on for you and sets up billing.</p> : null}
                   </form>

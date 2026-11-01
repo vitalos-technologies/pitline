@@ -30,7 +30,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
   if (!admin) redirect("/app/login");
   if (admin.mfaState === "enrollment_required") redirect("/app/mfa/enroll");
   if (admin.mfaState === "challenge_required") redirect("/app/mfa");
-  // D26: a card-first garage waits on a working subscription. Support (read-only) is never sent there.
+  // D27: a card-first garage waits on a working subscription. Support (read-only) is never sent there.
   if (!admin.impersonation && (await billingGate(admin.garage.id)).required) redirect(BILLING_SETUP_PATH);
 
   // P5.9: owners and managers of a garage in a group get "Group overview" in the switcher.
