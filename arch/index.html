@@ -1,0 +1,1474 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitline architecture</title>
+<meta name="description" content="Architecture of Pitline, the Vitalos multi-tenant garage booking platform: system context, containers, data model, deployment, key flows and security.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f7f9fc; --surface: #ffffff; --surface-2: #eef2f7; --text: #081a2a; --muted: #536273;
+  --border: #d9e1e8; --accent: #2457ff; --accent-2: #007e76; --accent-soft: #eef2ff;
+  --ok: #18794e; --warn: #9a6700; --bad: #c9372c;
+  --edge: #536273; --boundary: #8a99a8; --halo: #ffffff;
+  --n-person-bg: #081a2a; --n-person-line: #081a2a; --n-person-fg: #ffffff;
+  --n-web-bg: #eef2ff;   --n-web-line: #2457ff;
+  --n-svc-bg: #e6f4f2;   --n-svc-line: #007e76;
+  --n-db-bg: #fff6e0;    --n-db-line: #9a6700;
+  --n-ext-bg: #f1f3f5;   --n-ext-line: #536273;
+  --n-infra-bg: #f4ecff; --n-infra-line: #7a3fd1;
+  --n-sec-bg: #fdecea;   --n-sec-line: #c9372c;
+  --shadow: 0 8px 24px rgb(8 26 42 / 0.08);
+  --radius: 14px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b1622; --surface: #112131; --surface-2: #173247; --text: #e8eef5; --muted: #9fb0c2;
+    --border: #24384c; --accent: #8aa4ff; --accent-2: #3cc3b8; --accent-soft: #16244f;
+    --ok: #4cc38a; --warn: #e0b44a; --bad: #ff8a80;
+    --edge: #9fb0c2; --boundary: #5d7186; --halo: #112131;
+    --n-person-bg: #e8eef5; --n-person-line: #e8eef5; --n-person-fg: #081a2a;
+    --n-web-bg: #16244f;   --n-web-line: #8aa4ff;
+    --n-svc-bg: #0f3532;   --n-svc-line: #3cc3b8;
+    --n-db-bg: #3a2c0b;    --n-db-line: #e0b44a;
+    --n-ext-bg: #1b2836;   --n-ext-line: #9fb0c2;
+    --n-infra-bg: #2a1d46; --n-infra-line: #b48cff;
+    --n-sec-bg: #3d1714;   --n-sec-line: #ff8a80;
+    --shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1622; --surface: #112131; --surface-2: #173247; --text: #e8eef5; --muted: #9fb0c2;
+  --border: #24384c; --accent: #8aa4ff; --accent-2: #3cc3b8; --accent-soft: #16244f;
+  --ok: #4cc38a; --warn: #e0b44a; --bad: #ff8a80;
+  --edge: #9fb0c2; --boundary: #5d7186; --halo: #112131;
+  --n-person-bg: #e8eef5; --n-person-line: #e8eef5; --n-person-fg: #081a2a;
+  --n-web-bg: #16244f;   --n-web-line: #8aa4ff;
+  --n-svc-bg: #0f3532;   --n-svc-line: #3cc3b8;
+  --n-db-bg: #3a2c0b;    --n-db-line: #e0b44a;
+  --n-ext-bg: #1b2836;   --n-ext-line: #9fb0c2;
+  --n-infra-bg: #2a1d46; --n-infra-line: #b48cff;
+  --n-sec-bg: #3d1714;   --n-sec-line: #ff8a80;
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+code, kbd { font-family: var(--mono); font-size: 0.9em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 5px; overflow-wrap: anywhere; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+@media (min-width: 720px) { .wrap { padding: 0 28px; } }
+
+/* Hero */
+.hero { background: linear-gradient(135deg, var(--surface) 0%, var(--accent-soft) 100%); border-bottom: 1px solid var(--border); padding: 40px 0 28px; }
+.hero-top { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.eyebrow { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 46px); line-height: 1.1; letter-spacing: -0.02em; }
+.lede { margin: 0 0 18px; max-width: 760px; font-size: 18px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chip { font-size: 13px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); white-space: nowrap; }
+.chip b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.icon-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; font: 600 13px var(--font); color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; cursor: pointer; min-height: 40px; }
+.icon-btn:hover { border-color: var(--accent); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+/* Section nav */
+.tabs { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.tabs ul { display: flex; gap: 4px; margin: 0 auto; padding: 8px 16px; list-style: none; overflow-x: auto; max-width: 1180px; scrollbar-width: thin; }
+.tabs a { display: block; padding: 8px 12px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.tabs a:hover { color: var(--text); background: var(--surface-2); }
+.tabs a.active { color: var(--accent); background: var(--accent-soft); }
+
+/* Sections */
+section { padding: 36px 0 8px; }
+section > h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.01em; }
+section > .sub { margin: 0 0 20px; color: var(--muted); max-width: 820px; }
+h3 { margin: 26px 0 10px; font-size: 18px; }
+p { max-width: 860px; }
+
+/* Stat tiles */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0 0 20px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat .n { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.stat .l { font-size: 13px; color: var(--muted); }
+
+/* Cards */
+.grid-2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 860px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+.grid-3 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 720px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1040px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.card h4 { margin: 0 0 6px; font-size: 15px; }
+.card p, .card ul { margin: 0; font-size: 14px; color: var(--muted); }
+.card ul { padding-left: 18px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); color: var(--muted); }
+.tag.web { color: var(--n-web-line); border-color: var(--n-web-line); }
+.tag.svc { color: var(--n-svc-line); border-color: var(--n-svc-line); }
+.tag.db { color: var(--n-db-line); border-color: var(--n-db-line); }
+.tag.ext { color: var(--n-ext-line); border-color: var(--n-ext-line); }
+.tag.infra { color: var(--n-infra-line); border-color: var(--n-infra-line); }
+.tag.sec { color: var(--n-sec-line); border-color: var(--n-sec-line); }
+.callout { border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 var(--radius) var(--radius) 0; padding: 12px 16px; margin: 16px 0; font-size: 15px; }
+.callout.warn { border-left-color: var(--warn); }
+
+/* Diagram figures */
+figure.diagram { margin: 0 0 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+figure.diagram > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+figure.diagram > header h3 { margin: 0; font-size: 16px; }
+figure.diagram > header .tools { display: flex; gap: 6px; flex: none; }
+figure.diagram > header .tools button { font: 600 12px var(--font); color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; min-height: 32px; }
+figure.diagram > header .tools button:hover { color: var(--text); border-color: var(--accent); }
+.canvas { padding: 16px; overflow-x: auto; }
+.canvas > svg { display: block; margin: 0 auto; height: auto; }
+.canvas > svg.arch { width: 100%; min-width: 760px; }
+.canvas.mmd > svg { width: 100%; }
+figcaption { padding: 0 16px 14px; font-size: 14px; color: var(--muted); }
+pre.mmd-src, pre.mmd-fallback { margin: 0; padding: 14px 16px; background: var(--surface-2); color: var(--text); font: 12.5px/1.5 var(--mono); overflow-x: auto; border-top: 1px solid var(--border); white-space: pre; }
+pre.mmd-error { margin: 0; padding: 12px 16px; color: var(--bad); font: 12px var(--mono); white-space: pre-wrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 16px 14px; margin: 0; list-style: none; font-size: 13px; color: var(--muted); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 2px solid; }
+.legend i.person { background: var(--n-person-bg); border-color: var(--n-person-line); }
+.legend i.web { background: var(--n-web-bg); border-color: var(--n-web-line); }
+.legend i.svc { background: var(--n-svc-bg); border-color: var(--n-svc-line); }
+.legend i.db { background: var(--n-db-bg); border-color: var(--n-db-line); }
+.legend i.ext { background: var(--n-ext-bg); border-color: var(--n-ext-line); border-style: dashed; }
+.legend i.infra { background: var(--n-infra-bg); border-color: var(--n-infra-line); }
+.legend i.sec { background: var(--n-sec-bg); border-color: var(--n-sec-line); }
+.legend i.line { width: 22px; height: 0; border-radius: 0; border-width: 2px 0 0; border-color: var(--edge); }
+.legend i.line.async { border-style: dashed; }
+
+/* Hand-built SVG vocabulary (svg.arch) */
+svg.arch { font-family: var(--font); }
+svg.arch text { fill: var(--text); }
+svg.arch .node rect, svg.arch .node path, svg.arch .node ellipse { stroke-width: 2; }
+svg.arch .node .t { font-size: 15px; font-weight: 700; text-anchor: middle; }
+svg.arch .node .s { font-size: 12px; fill: var(--muted); text-anchor: middle; }
+svg.arch .node.person rect, svg.arch .node.person circle { fill: var(--n-person-bg); stroke: var(--n-person-line); }
+svg.arch .node.person .t, svg.arch .node.person .s { fill: var(--n-person-fg); }
+svg.arch .node.web :is(rect, path, ellipse) { fill: var(--n-web-bg); stroke: var(--n-web-line); }
+svg.arch .node.svc :is(rect, path, ellipse) { fill: var(--n-svc-bg); stroke: var(--n-svc-line); }
+svg.arch .node.db :is(rect, path, ellipse) { fill: var(--n-db-bg); stroke: var(--n-db-line); }
+svg.arch .node.ext :is(rect, path, ellipse) { fill: var(--n-ext-bg); stroke: var(--n-ext-line); stroke-dasharray: 5 4; }
+svg.arch .node.infra :is(rect, path, ellipse) { fill: var(--n-infra-bg); stroke: var(--n-infra-line); }
+svg.arch .node.sec :is(rect, path, ellipse) { fill: var(--n-sec-bg); stroke: var(--n-sec-line); }
+svg.arch .boundary rect { fill: none; stroke: var(--boundary); stroke-width: 1.5; stroke-dasharray: 7 5; }
+svg.arch .boundary.zone rect { fill: var(--surface-2); fill-opacity: 0.45; }
+svg.arch .boundary .bt { font-size: 13px; font-weight: 700; fill: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+svg.arch .edge { fill: none; stroke: var(--edge); stroke-width: 1.8; }
+svg.arch .edge.async { stroke-dasharray: 6 5; }
+svg.arch .edge.hot { stroke: var(--accent); stroke-width: 2.2; }
+svg.arch .head { fill: var(--edge); }
+svg.arch .head.hot { fill: var(--accent); }
+svg.arch .el { font-size: 12px; fill: var(--muted); paint-order: stroke; stroke: var(--halo); stroke-width: 5px; stroke-linejoin: round; }
+svg.arch .badge rect { fill: var(--accent); stroke: none; }
+svg.arch .badge text { fill: #ffffff; font-size: 11px; font-weight: 700; text-anchor: middle; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin: 0 0 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+
+/* Zoom dialog */
+dialog#zoom { width: min(96vw, 1600px); height: min(92vh, 1100px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+dialog#zoom::backdrop { background: rgb(8 26 42 / 0.6); }
+dialog#zoom .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+dialog#zoom .bar h3 { margin: 0; font-size: 15px; }
+dialog#zoom .bar div { display: flex; gap: 6px; }
+dialog#zoom .stage { overflow: auto; height: calc(100% - 58px); padding: 16px; }
+dialog#zoom .stage svg { display: block; margin: 0 auto; max-width: none !important; height: auto; }
+
+footer { margin-top: 40px; padding: 26px 0 40px; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+footer ul { padding-left: 18px; }
+@media (max-width: 560px) { .hero-top { flex-direction: column-reverse; } .lede { font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media print { .tabs, .tools, #theme-toggle { display: none !important; } figure.diagram { break-inside: avoid; box-shadow: none; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-top">
+      <div>
+        <p class="eyebrow">Vitalos Technologies · Architecture</p>
+        <h1>Pitline</h1>
+        <p class="lede">A multi-tenant garage booking platform. Each garage gets a phone-first booking page on its own domain or a free <code>&lt;slug&gt;.pitline.co.uk</code> link, and runs its diary, customers, reminders, messages and invoices at <code>pitline.co.uk</code>. One Next.js app serves every garage, the request host decides which garage, and all data sits in one London Postgres database with row-level security.</p>
+      </div>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch colour theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span>Theme</span>
+      </button>
+    </div>
+    <ul class="chips">
+      <li class="chip"><b>Stack</b>Next.js 16 · Supabase · Django · Node</li>
+      <li class="chip"><b>Hosting</b>Vercel · Cloud Run · Supabase, all in London</li>
+      <li class="chip"><b>Status</b>Phases 1–5 built; first live garage pending</li>
+      <li class="chip"><b>Repo</b>vitalos-technologies/pitline</li>
+      <li class="chip"><b>Snapshot</b>3 Nov 2026 · <code>82578f9</code></li>
+    </ul>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Sections">
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#context">System context</a></li>
+    <li><a href="#containers">Containers</a></li>
+    <li><a href="#data">Data model</a></li>
+    <li><a href="#deployment">Deployment &amp; CI/CD</a></li>
+    <li><a href="#flows">Key flows</a></li>
+    <li><a href="#security">Security</a></li>
+    <li><a href="#decisions">Decisions &amp; risks</a></li>
+  </ul>
+</nav>
+
+<main class="wrap">
+
+<section id="overview">
+  <h2>Overview</h2>
+  <p class="sub">What the system is made of, counted from the repository at <code>82578f9</code>.</p>
+  <div class="stats">
+    <div class="stat"><div class="n">3</div><div class="l">deployable services, plus 2 Cloud Run jobs</div></div>
+    <div class="stat"><div class="n">93</div><div class="l">database tables, 75 with <code>garage_id</code></div></div>
+    <div class="stat"><div class="n">36</div><div class="l">migrations</div></div>
+    <div class="stat"><div class="n">56</div><div class="l">route handlers</div></div>
+    <div class="stat"><div class="n">16</div><div class="l">background job kinds</div></div>
+    <div class="stat"><div class="n">14</div><div class="l">external services</div></div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><span class="tag web">Front end</span><h4>Next.js 16 App Router</h4><p>React 19, Tailwind 4, server actions. Booking site, garage admin, marketing and sign-up in one app, split by host in <code>src/proxy.ts</code>.</p></div>
+    <div class="card"><span class="tag svc">Back end</span><h4>Route handlers, domain modules, job runner</h4><p>zod-validated APIs, the booking engine, reminders and messaging in <code>src/lib</code>, and a Postgres-backed job queue drained by Vercel Cron.</p></div>
+    <div class="card"><span class="tag db">Data</span><h4>Supabase Postgres 17, London</h4><p>RLS on every tenant table, booking functions in SQL, a <code>btree_gist</code> exclusion constraint against double bookings, Auth with TOTP, Storage.</p></div>
+    <div class="card"><span class="tag svc">Voice</span><h4>AI voice desk</h4><p>Node 22 service on Cloud Run. Answers missed calls for Pro garages over Twilio ConversationRelay with Claude, booking through the agent tool API.</p></div>
+    <div class="card"><span class="tag web">Operations</span><h4>Django super admin</h4><p>Python 3.12, Django 5.2, HTMX. Vitalos staff console served at <code>/superadmin</code> through the app's proxy, reading masked views only.</p></div>
+    <div class="card"><span class="tag infra">Delivery</span><h4>GitHub Actions, self-hosted</h4><p>Lint, unit, pgTAP, tenancy, Playwright with axe and Lighthouse on every change; Vercel deploys on merge; containers deploy by hand.</p></div>
+  </div>
+</section>
+
+<section id="context">
+  <h2>System context</h2>
+  <p class="sub">Who uses Pitline and which outside systems it depends on (C4 level 1). Callers reach it only through Twilio; every provider is called from server code.</p>
+  <figure class="diagram" data-title="System context">
+    <header><h3>System context</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="context">
+flowchart LR
+  owner(["Car owner<br/>phone browser"]):::person
+  staff(["Garage staff<br/>owner, manager, technician"]):::person
+  vstaff(["Vitalos staff<br/>super admin"]):::person
+  caller(["Caller<br/>rings the garage"]):::person
+  pitline["Pitline<br/>booking pages, garage admin,<br/>reminders, AI front desk"]:::web
+  twilio["Twilio<br/>SMS, WhatsApp, voice"]:::ext
+  resend["Resend<br/>email"]:::ext
+  vehicle["DVLA, DVSA,<br/>Vehicle Data Global"]:::ext
+  stripe["Stripe<br/>billing and payments, test mode"]:::ext
+  domains["Vercel Domains API"]:::ext
+  claude["Anthropic Claude<br/>voice desk model"]:::ext
+  acct["Xero, QuickBooks, Sage"]:::ext
+  cf["Cloudflare<br/>Turnstile, inbound email"]:::ext
+  places["Google Places"]:::ext
+  askbridge["Askbridge<br/>website chat"]:::ext
+  workforce["Workforce<br/>AI agents"]:::ext
+  platform["Vitalos platform<br/>Product Pipeline"]:::ext
+  owner -- "books on the garage host" --> pitline
+  staff -- "runs the garage" --> pitline
+  vstaff -- "/superadmin" --> pitline
+  caller -- "calls" --> twilio
+  twilio -- "signed webhooks, ConversationRelay" --> pitline
+  workforce -- "agent tool API" --> pitline
+  platform -- "status API" --> pitline
+  pitline -- "texts and calls" --> twilio
+  pitline -- "email" --> resend
+  pitline -- "vehicle and MOT lookups" --> vehicle
+  pitline -- "subscriptions, deposits, Direct Debit" --> stripe
+  pitline -- "add and verify domains" --> domains
+  pitline -- "voice desk turns" --> claude
+  pitline -- "invoices and payments" --> acct
+  pitline -- "bot check, inbound replies" --> cf
+  pitline -- "address search" --> places
+  pitline -- "loads chat widget" --> askbridge
+classDef person fill:#081a2a,stroke:#081a2a,color:#ffffff
+classDef web fill:#dce4ff,stroke:#2457ff,color:#081a2a
+classDef ext fill:#f1f3f5,stroke:#536273,color:#26333f,stroke-dasharray:4 3
+</script>
+    <figcaption>Car owners, garage staff and Vitalos staff all arrive over HTTPS at one app. Askbridge is the only provider the browser talks to directly: a garage's own chat widget, loaded by site key on its booking pages.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Outside system</th><th>Used for</th><th>Where in the code</th></tr></thead>
+    <tbody>
+      <tr><td>Twilio</td><td>SMS and WhatsApp reminders and replies, missed calls, voicemail, ConversationRelay for the voice desk</td><td><code>src/lib/messaging</code>, <code>services/voice</code></td></tr>
+      <tr><td>Resend</td><td>Booking, invoice and enquiry email; delivery events</td><td><code>src/lib/email</code></td></tr>
+      <tr><td>DVLA, DVSA, Vehicle Data Global</td><td>Vehicle details and MOT expiry, cached by peppered hash</td><td><code>src/lib/vehicle</code></td></tr>
+      <tr><td>Stripe (test mode)</td><td>Garage subscriptions; deposits, pay-by-link and no-show fees through Connect; Direct Debit service plans</td><td><code>src/lib/billing</code>, <code>src/lib/payments</code></td></tr>
+      <tr><td>Vercel Domains API</td><td>Adding and verifying garages' own booking hosts</td><td><code>src/lib/vercel</code></td></tr>
+      <tr><td>Anthropic Claude</td><td>Model behind the voice desk (Haiku class)</td><td><code>services/voice/src/llm.ts</code></td></tr>
+      <tr><td>Xero, QuickBooks, Sage</td><td>Accounting sync; fake provider until developer apps exist</td><td><code>src/lib/accounting</code></td></tr>
+      <tr><td>Google Places</td><td>Address search at sign-up</td><td><code>src/lib/places</code></td></tr>
+      <tr><td>Cloudflare</td><td>Turnstile bot check; signed inbound email for enquiry replies</td><td><code>src/lib/turnstile.ts</code></td></tr>
+      <tr><td>Sentry</td><td>Error tracking</td><td><code>sentry.*.config.ts</code></td></tr>
+      <tr><td>Askbridge</td><td>Each garage's own chat widget; Pitline sends Askbridge nothing</td><td><code>src/components/askbridge</code></td></tr>
+      <tr><td>Workforce</td><td>AI agents using the agent tool API with a Pro garage's token</td><td><code>src/lib/agent-api</code></td></tr>
+      <tr><td>Vitalos platform</td><td>Product Pipeline reads the super admin's status endpoint</td><td><code>superadmin/apps/autofix</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="containers">
+  <h2>Containers</h2>
+  <p class="sub">The deployable parts, the stores they own and how they talk (C4 level 2). Everything enters through the proxy, which picks the garage from the host.</p>
+  <figure class="diagram" data-title="Container view">
+    <header><h3>Container view</h3><div class="tools"></div></header>
+    <div class="canvas">
+      <svg class="arch" viewBox="0 0 1460 900" role="img" aria-labelledby="c-title c-desc">
+        <title id="c-title">Pitline container view</title>
+        <desc id="c-desc">Car owners, garage staff, Vitalos staff, Workforce agents and the Vitalos platform reach the Next.js proxy on Vercel. The proxy routes to the booking site, garage admin, marketing site and route handlers, and forwards /superadmin to the Django super admin on Cloud Run. Domain modules and the job runner use Supabase Postgres, Auth and Storage, and call external providers server side. The voice desk on Cloud Run connects Twilio calls to Claude and books through the agent tool API.</desc>
+        <defs>
+          <marker id="c-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+          <marker id="c-arr-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head hot" d="M0 0 L10 5 L0 10 z"/></marker>
+        </defs>
+
+        <!-- Boundaries -->
+        <g class="boundary"><rect x="200" y="16" width="870" height="868" rx="18"/><text class="bt" x="216" y="40">Pitline</text></g>
+        <g class="boundary zone"><rect x="230" y="60" width="530" height="470" rx="14"/><text class="bt" x="250" y="86">Vercel · London region</text></g>
+        <g class="boundary zone"><rect x="790" y="60" width="260" height="330" rx="14"/><text class="bt" x="810" y="86">Cloud Run · London</text></g>
+        <g class="boundary zone"><rect x="230" y="560" width="820" height="300" rx="14"/><text class="bt" x="250" y="586">Supabase · London</text></g>
+        <g class="boundary"><rect x="450" y="600" width="580" height="244" rx="12"/><text class="bt" x="466" y="624">Postgres 17 · one database</text></g>
+
+        <!-- Actors -->
+        <g class="node person" transform="translate(16,100)"><rect width="160" height="64" rx="32"/><text class="t" x="80" y="29">Car owner</text><text class="s" x="80" y="47">phone browser</text></g>
+        <g class="node person" transform="translate(16,220)"><rect width="160" height="64" rx="32"/><text class="t" x="80" y="29">Garage staff</text><text class="s" x="80" y="47">owner, manager, tech</text></g>
+        <g class="node person" transform="translate(16,340)"><rect width="160" height="64" rx="32"/><text class="t" x="80" y="29">Vitalos staff</text><text class="s" x="80" y="47">super admin, TOTP</text></g>
+        <g class="node ext" transform="translate(16,470)"><rect width="160" height="56" rx="10"/><text class="t" x="80" y="25">Workforce</text><text class="s" x="80" y="43">agent token, Pro</text></g>
+        <g class="node ext" transform="translate(16,560)"><rect width="160" height="56" rx="10"/><text class="t" x="80" y="25">Vitalos platform</text><text class="s" x="80" y="43">Product Pipeline</text></g>
+        <g class="node ext" transform="translate(16,680)"><rect width="160" height="56" rx="10"/><text class="t" x="80" y="25">Askbridge</text><text class="s" x="80" y="43">widget, site key</text></g>
+
+        <!-- Vercel -->
+        <g class="node web" transform="translate(270,100)"><rect width="460" height="64" rx="10"/><text class="t" x="230" y="28">Proxy (src/proxy.ts)</text><text class="s" x="230" y="47">host → garage · CSP · /superadmin forward</text></g>
+        <g class="node web" transform="translate(270,200)"><rect width="146" height="72" rx="10"/><text class="t" x="73" y="31">Booking site</text><text class="s" x="73" y="51">/_site/[garageId]</text></g>
+        <g class="node web" transform="translate(427,200)"><rect width="146" height="72" rx="10"/><text class="t" x="73" y="31">Garage admin</text><text class="s" x="73" y="51">/app · MFA</text></g>
+        <g class="node web" transform="translate(584,200)"><rect width="146" height="72" rx="10"/><text class="t" x="73" y="31">Marketing site</text><text class="s" x="73" y="51">sign-up, contact</text></g>
+        <g class="node svc" transform="translate(270,310)"><rect width="220" height="72" rx="10"/><text class="t" x="110" y="31">Job runner</text><text class="s" x="110" y="51">cron + drain · 16 job kinds</text></g>
+        <g class="node svc" transform="translate(510,310)"><rect width="220" height="72" rx="10"/><text class="t" x="110" y="31">Route handlers</text><text class="s" x="110" y="51">booking, agent tool, webhooks</text></g>
+        <g class="node svc" transform="translate(270,420)"><rect width="460" height="72" rx="10"/><text class="t" x="230" y="31">Domain modules (src/lib)</text><text class="s" x="230" y="51">booking engine, reminders, messaging, payments, plans</text></g>
+
+        <!-- Cloud Run -->
+        <g class="node svc" transform="translate(820,100)"><rect width="200" height="72" rx="10"/><text class="t" x="100" y="31">Voice desk</text><text class="s" x="100" y="51">services/voice · Claude</text></g>
+        <g class="node web" transform="translate(820,200)"><rect width="200" height="72" rx="10"/><text class="t" x="100" y="31">Super admin</text><text class="s" x="100" y="51">Django 5.2 · HTMX</text></g>
+        <g class="node svc" transform="translate(820,300)"><rect width="150" height="64" rx="10"/><text class="t" x="75" y="28">Notify job</text><text class="s" x="75" y="46">every 5 min</text></g>
+
+        <!-- Supabase -->
+        <g class="node svc" transform="translate(250,620)"><rect width="180" height="64" rx="10"/><text class="t" x="90" y="28">Supabase Auth</text><text class="s" x="90" y="46">email, TOTP, AAL2</text></g>
+        <g class="node db" transform="translate(250,740)"><rect width="180" height="64" rx="10"/><text class="t" x="90" y="28">Storage</text><text class="s" x="90" y="46">3 buckets</text></g>
+        <g class="node db" transform="translate(470,640)"><path d="M0 14 V76 A125 14 0 0 0 250 76 V14"/><ellipse cx="125" cy="14" rx="125" ry="14"/><text class="t" x="125" y="52">Tenant tables</text><text class="s" x="125" y="71">RLS on garage_id · no_overlap</text></g>
+        <g class="node db" transform="translate(750,640)"><rect width="230" height="64" rx="10"/><text class="t" x="115" y="28">Job queue</text><text class="s" x="115" y="46">jobs · claim_jobs()</text></g>
+        <g class="node db" transform="translate(470,770)"><rect width="250" height="56" rx="10"/><text class="t" x="125" y="25">Audit logs</text><text class="s" x="125" y="43">append-only, platform and garage</text></g>
+        <g class="node sec" transform="translate(750,770)"><rect width="260" height="56" rx="10"/><text class="t" x="130" y="25">superadmin views</text><text class="s" x="130" y="43">masked, 4 write functions</text></g>
+
+        <!-- External providers -->
+        <g class="node ext" transform="translate(1110,40)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Twilio</text><text class="s" x="165" y="43">SMS, WhatsApp, voice, ConversationRelay</text></g>
+        <g class="node ext" transform="translate(1110,118)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Resend</text><text class="s" x="165" y="43">email out, delivery events</text></g>
+        <g class="node ext" transform="translate(1110,196)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">DVLA · DVSA · Vehicle Data Global</text><text class="s" x="165" y="43">vehicle details and MOT expiry</text></g>
+        <g class="node ext" transform="translate(1110,274)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Stripe (test mode)</text><text class="s" x="165" y="43">subscriptions, Connect, Direct Debit</text></g>
+        <g class="node ext" transform="translate(1110,352)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Vercel Domains API</text><text class="s" x="165" y="43">garages' own booking hosts</text></g>
+        <g class="node ext" transform="translate(1110,430)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Anthropic Claude</text><text class="s" x="165" y="43">voice desk model</text></g>
+        <g class="node ext" transform="translate(1110,508)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Xero · QuickBooks · Sage</text><text class="s" x="165" y="43">accounting sync, fake until apps exist</text></g>
+        <g class="node ext" transform="translate(1110,586)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Google Places</text><text class="s" x="165" y="43">address search at sign-up</text></g>
+        <g class="node ext" transform="translate(1110,664)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Cloudflare</text><text class="s" x="165" y="43">Turnstile, signed inbound email</text></g>
+        <g class="node ext" transform="translate(1110,742)"><rect width="330" height="56" rx="10"/><text class="t" x="165" y="25">Sentry</text><text class="s" x="165" y="43">error tracking</text></g>
+
+        <!-- Inbound bus: every caller enters through the proxy -->
+        <path class="edge hot" d="M176 132 H196 M176 252 H196 M176 372 H196 M176 498 H196 M176 588 H196 M196 132 V588"/>
+        <path class="edge hot" d="M196 132 H268" marker-end="url(#c-arr-hot)"/><text class="el" x="206" y="124">HTTPS</text>
+        <path class="edge async" d="M268 262 C236 262 236 708 178 708" marker-end="url(#c-arr)"/><text class="el" x="186" y="660">widget</text>
+
+        <!-- Proxy fan-out -->
+        <path class="edge" d="M343 164 V198" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M500 164 V198" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M657 164 V198" marker-end="url(#c-arr)"/><text class="el" x="352" y="188">rewrite by host</text>
+        <path class="edge" d="M730 152 C756 152 756 326 732 326" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M730 120 C776 120 776 236 818 236" marker-end="url(#c-arr)"/><text class="el" x="744" y="112">proxy secret</text>
+
+        <!-- App internals -->
+        <path class="edge" d="M500 272 V418" marker-end="url(#c-arr)"/><text class="el" x="506" y="298">server actions</text>
+        <path class="edge" d="M380 382 V418" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M620 382 V418" marker-end="url(#c-arr)"/>
+
+        <!-- Data -->
+        <path class="edge hot" d="M560 492 V638" marker-end="url(#c-arr-hot)"/><text class="el" x="568" y="548">SQL · RLS</text>
+        <path class="edge" d="M700 492 C700 560 865 570 865 638" marker-end="url(#c-arr)"/><text class="el" x="770" y="578">enqueue, claim</text>
+        <path class="edge" d="M330 492 V618" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1000 272 V768" marker-end="url(#c-arr)"/><text class="el" x="992" y="600" text-anchor="end">read-only role</text>
+
+        <!-- Voice desk -->
+        <path class="edge" d="M818 150 C770 150 770 350 732 350" marker-end="url(#c-arr)"/><text class="el" x="740" y="262">agent API</text>
+        <path class="edge" d="M1108 76 C1056 76 1056 126 1022 126" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1022 156 C1064 156 1064 458 1108 458" marker-end="url(#c-arr)"/>
+
+        <!-- Providers -->
+        <path class="edge async" d="M1108 52 C980 30 780 34 700 98" marker-end="url(#c-arr)"/><text class="el" x="862" y="54">signed webhooks</text>
+        <path class="edge" d="M732 470 H1090 M1090 86 V770"/><text class="el" x="760" y="462">server-side API calls</text>
+        <path class="edge" d="M1090 86 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 146 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 224 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 302 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 380 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 536 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 614 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 692 H1108" marker-end="url(#c-arr)"/>
+        <path class="edge" d="M1090 770 H1108" marker-end="url(#c-arr)"/>
+
+        <!-- Badges -->
+        <g class="badge" transform="translate(716,88)"><rect width="22" height="22" rx="11"/><text x="11" y="15">1</text></g>
+        <g class="badge" transform="translate(704,632)"><rect width="22" height="22" rx="11"/><text x="11" y="15">2</text></g>
+        <g class="badge" transform="translate(476,298)"><rect width="22" height="22" rx="11"/><text x="11" y="15">3</text></g>
+        <g class="badge" transform="translate(1006,188)"><rect width="22" height="22" rx="11"/><text x="11" y="15">4</text></g>
+        <g class="badge" transform="translate(1006,88)"><rect width="22" height="22" rx="11"/><text x="11" y="15">5</text></g>
+        <g class="badge" transform="translate(162,460)"><rect width="22" height="22" rx="11"/><text x="11" y="15">6</text></g>
+      </svg>
+    </div>
+    <ul class="legend">
+      <li><i class="person"></i>Person</li><li><i class="web"></i>Front end</li><li><i class="svc"></i>Service or worker</li>
+      <li><i class="db"></i>Data store</li><li><i class="sec"></i>Security control</li><li><i class="ext"></i>External system</li>
+      <li><i class="line"></i>Sync call</li><li><i class="line async"></i>Async, webhook or script load</li>
+    </ul>
+    <figcaption>
+      <strong>1</strong> The proxy classifies the host (admin, free link, custom domain, unknown) and rewrites garage hosts to <code>/_site/&lt;garageId&gt;</code>; the client never sends a garage id.
+      <strong>2</strong> <code>create_booking()</code> runs in one transaction under a per-garage lock, and the <code>no_overlap</code> exclusion constraint is the last guard against double bookings.
+      <strong>3</strong> <code>reminders.send</code> re-checks consent and opt-out and only sends 09:00–19:00, Monday to Saturday, in the garage's time zone.
+      <strong>4</strong> The super admin reaches Pitline's data only as <code>autofix_superadmin</code>: masked views, read-only sessions, four audited write functions.
+      <strong>5</strong> The voice desk gets a per-call agent token; its bookings are always requests for staff to accept.
+      <strong>6</strong> Agent tokens are stored as a peppered HMAC and scoped to tools; Workforce tokens need the Pro plan.
+    </figcaption>
+  </figure>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Container</th><th>Technology</th><th>Responsibility</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>Proxy</td><td>Next.js 16 proxy</td><td>Host classification and rewrite, per-garage CSP and <code>frame-ancestors</code>, <code>/superadmin</code> forwarding with a shared secret</td><td><code>src/proxy.ts</code>, <code>src/lib/tenancy</code></td></tr>
+      <tr><td>Booking site</td><td>App Router, server actions</td><td>Five-step booking, manage booking, reminder links, privacy and unsubscribe pages</td><td><code>src/app/%5Fsite/[garageId]</code></td></tr>
+      <tr><td>Garage admin</td><td>App Router</td><td>Today, Diary, bookings, customers and cars, reminders, messages, invoices, settings, Pro features</td><td><code>src/app/app</code></td></tr>
+      <tr><td>Marketing site and sign-up</td><td>App Router</td><td>The only indexable page, contact form, sign-up and onboarding</td><td><code>src/app/page.tsx</code>, <code>src/app/signup</code></td></tr>
+      <tr><td>Next.js super admin</td><td>App Router</td><td>Earlier platform console at <code>/admin</code>, kept until the Django one replaces it</td><td><code>src/app/admin</code></td></tr>
+      <tr><td>Route handlers</td><td>Route handlers (56)</td><td>Booking API, agent tool API, voice session, webhooks, cron and drain</td><td><code>src/app/api</code></td></tr>
+      <tr><td>Job runner</td><td>Node on Vercel functions</td><td>Claims jobs per kind with timeouts and exponential backoff</td><td><code>src/lib/jobs</code></td></tr>
+      <tr><td>Domain modules</td><td>TypeScript</td><td>Business rules for booking, reminders, messaging, payments, plans and consent</td><td><code>src/lib</code></td></tr>
+      <tr><td>Voice desk</td><td>Node 22, <code>ws</code>, Anthropic SDK</td><td>Missed-call answering for Pro garages over ConversationRelay</td><td><code>services/voice</code></td></tr>
+      <tr><td>Django super admin</td><td>Python 3.12, Django 5.2, HTMX</td><td>Vitalos staff console, read-only REST API, product status endpoint</td><td><code>superadmin</code></td></tr>
+      <tr><td>Postgres, Auth, Storage</td><td>Supabase, London</td><td>Tenant data with RLS, booking and job functions, audit logs, sign-in, files</td><td><code>supabase/migrations</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="data">
+  <h2>Data model</h2>
+  <p class="sub">93 tables in <code>public</code> from 36 migrations, 20 masked views in <code>superadmin</code>, three Storage buckets. Diagrams show keys, the tenant key and the most telling columns.</p>
+  <div class="grid-3">
+    <div class="card"><span class="tag sec">Tenant key</span><h4>75 tables carry <code>garage_id</code></h4><p>Not null, defaulted from <code>current_garage_id()</code>, cascading from <code>garages</code>. Children use composite keys so a row cannot point into another garage.</p></div>
+    <div class="card"><span class="tag sec">RLS</span><h4>Policies on every tenant table</h4><p><code>garage_id = current_garage_id()</code>, which trusts the <code>x-garage-id</code> header only for the service role or a member. <code>anon</code> has no grants.</p></div>
+    <div class="card"><span class="tag sec">Proof</span><h4>Tenancy suite</h4><p><code>tests/integration/tenancy.test.ts</code> finds every table with <code>garage_id</code> and checks cross-garage select, insert, update, delete and move.</p></div>
+  </div>
+  <h3>Tenancy, access and audit</h3>
+  <figure class="diagram" data-title="Tenancy, access and audit">
+    <header><h3>Tenancy, access and audit</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="erd-tenancy">
+erDiagram
+  GARAGES ||--o{ GARAGE_DOMAINS : "served on"
+  GARAGES ||--o{ GARAGE_MEMBERS : "staffed by"
+  GARAGES ||--o{ GARAGE_INVITES : "invites"
+  GARAGES ||--o{ GARAGE_AGREEMENTS : "accepts DPA"
+  GARAGES ||--o{ GARAGE_SUBSCRIPTIONS : "billed by"
+  GARAGES ||--o{ AGENT_TOKENS : "issues"
+  AGENT_TOKENS ||--o{ AGENT_CALL_LOG : "logged in"
+  GARAGES ||--o{ ADMIN_AUDIT_LOG : "audited in"
+  GARAGES ||--o{ PLATFORM_IMPERSONATIONS : "support sessions"
+  PLATFORM_ADMINS ||--o{ PLATFORM_IMPERSONATIONS : "opens"
+  PLATFORM_ADMINS ||--o{ PLATFORM_AUDIT_LOG : "acts in"
+  GARAGES {
+    uuid id PK
+    text slug UK
+    text plan
+    text status
+    boolean mot_enabled
+    text timezone
+  }
+  GARAGE_DOMAINS {
+    uuid id PK
+    uuid garage_id FK
+    text hostname UK
+    text kind
+    text status
+  }
+  GARAGE_MEMBERS {
+    uuid id PK
+    uuid garage_id FK
+    uuid user_id FK
+    text role
+  }
+  GARAGE_INVITES {
+    uuid id PK
+    uuid garage_id FK
+    text role
+    text token_hash
+  }
+  GARAGE_AGREEMENTS {
+    uuid id PK
+    uuid garage_id FK
+    text text_hash
+  }
+  GARAGE_SUBSCRIPTIONS {
+    uuid id PK
+    uuid garage_id FK
+    text plan
+    text status
+  }
+  AGENT_TOKENS {
+    uuid id PK
+    uuid garage_id FK
+    text token_hash UK
+    text audience
+    text_array scopes
+  }
+  AGENT_CALL_LOG {
+    uuid id PK
+    uuid garage_id FK
+    uuid token_id FK
+    text tool
+    text outcome
+  }
+  ADMIN_AUDIT_LOG {
+    uuid id PK
+    uuid garage_id FK
+    text action
+  }
+  PLATFORM_ADMINS {
+    uuid user_id PK
+  }
+  PLATFORM_IMPERSONATIONS {
+    uuid id PK
+    uuid garage_id FK
+    uuid admin_user_id FK
+    timestamptz expires_at
+  }
+  PLATFORM_AUDIT_LOG {
+    uuid id PK
+    uuid actor_id FK
+    uuid target_garage_id FK
+    text action
+    text reason
+  }
+</script>
+    <figcaption>Platform admins sit outside any garage. Support sessions are read-only, last at most two hours and are written to both audit logs.</figcaption>
+  </figure>
+  <h3>Booking engine</h3>
+  <figure class="diagram" data-title="Booking engine">
+    <header><h3>Booking engine</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="erd-booking">
+erDiagram
+  GARAGES ||--o{ RESOURCES : "has bays and vans"
+  GARAGES ||--o{ OPENING_HOURS : "opens"
+  GARAGES ||--o{ CLOSURES : "closes"
+  GARAGES ||--o{ SERVICES : "offers"
+  GARAGES ||--o{ CUSTOMERS : "serves"
+  CUSTOMERS ||--o{ VEHICLES : "owns"
+  CUSTOMERS ||--o{ BOOKINGS : "makes"
+  VEHICLES ||--o{ BOOKINGS : "booked for"
+  SERVICES ||--o{ BOOKINGS : "booked as"
+  RESOURCES ||--o{ BOOKINGS : "blocked by"
+  BOOKINGS ||--o{ BOOKING_EVENTS : "history"
+  BOOKINGS ||--o{ BOOKING_ASSIGNMENTS : "assigned"
+  BOOKINGS ||--o{ BOOKING_NOTIFICATION_EVENTS : "notified"
+  GARAGES {
+    uuid id PK
+    text slug UK
+    int slot_step_min
+    boolean approve_online
+  }
+  RESOURCES {
+    uuid id PK
+    uuid garage_id FK
+    text kind
+    boolean active
+  }
+  OPENING_HOURS {
+    uuid id PK
+    uuid garage_id FK
+    smallint weekday
+    time opens
+    time closes
+  }
+  CLOSURES {
+    uuid id PK
+    uuid garage_id FK
+    date starts_on
+    date ends_on
+  }
+  SERVICES {
+    uuid id PK
+    uuid garage_id FK
+    int duration_min
+    text resource_kind
+    boolean is_mot
+  }
+  CUSTOMERS {
+    uuid id PK
+    uuid garage_id FK
+    text phone UK
+    boolean reminder_consent
+    boolean offers_consent
+  }
+  VEHICLES {
+    uuid id PK
+    uuid garage_id FK
+    uuid customer_id FK
+    text registration UK
+    date mot_expiry
+  }
+  BOOKINGS {
+    uuid id PK
+    uuid garage_id FK
+    uuid resource_id FK
+    text reference UK
+    tstzrange during
+    text status
+    text source
+    text idempotency_key UK
+  }
+  BOOKING_EVENTS {
+    uuid id PK
+    uuid garage_id FK
+    uuid booking_id FK
+    text type
+    text actor
+  }
+  BOOKING_ASSIGNMENTS {
+    uuid id PK
+    uuid garage_id FK
+    uuid booking_id FK
+    uuid technician_id
+  }
+  BOOKING_NOTIFICATION_EVENTS {
+    uuid id PK
+    uuid booking_id FK
+    text kind
+  }
+</script>
+    <figcaption><code>bookings.during</code> is the time a resource is blocked, including travel and buffer. <code>no_overlap exclude using gist (resource_id with =, during with &amp;&amp;)</code> ignores cancelled and no-show bookings.</figcaption>
+  </figure>
+  <h3>Reminders, messaging and jobs</h3>
+  <figure class="diagram" data-title="Reminders, messaging and jobs">
+    <header><h3>Reminders, messaging and jobs</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="erd-messaging">
+erDiagram
+  GARAGES ||--o{ REMINDER_RULES : "configures"
+  REMINDER_RULES ||--o{ REMINDER_SENDS : "schedules"
+  VEHICLES ||--o{ REMINDER_SENDS : "due for"
+  CUSTOMERS ||--o{ REMINDER_SENDS : "sent to"
+  REMINDER_SENDS |o--o{ BOOKINGS : "wins back"
+  CUSTOMERS ||--o{ MESSAGES : "texts and email"
+  CALLS |o--o{ MESSAGES : "text-back"
+  GARAGES ||--o{ GARAGE_PHONE_NUMBERS : "routes"
+  GARAGES ||--o{ CALLS : "receives"
+  GARAGES ||--o{ CAMPAIGNS : "runs"
+  CAMPAIGNS ||--o{ CAMPAIGN_SENDS : "sends"
+  CUSTOMERS ||--o{ CAMPAIGN_SENDS : "receives"
+  REMINDER_RULES {
+    uuid id PK
+    uuid garage_id FK
+    text kind UK
+    int_array offset_days
+    text channel
+  }
+  REMINDER_SENDS {
+    uuid id PK
+    uuid garage_id FK
+    uuid vehicle_id FK
+    date due_date
+    timestamptz send_at
+    text status
+    text link_token_hash
+  }
+  BOOKINGS {
+    uuid id PK
+    uuid reminder_send_id FK
+    text source
+  }
+  MESSAGES {
+    uuid id PK
+    uuid garage_id FK
+    text channel
+    text direction
+    text provider_msg_id UK
+    text status
+  }
+  CALLS {
+    uuid id PK
+    uuid garage_id FK
+    text provider_call_sid UK
+    boolean missed
+  }
+  GARAGE_PHONE_NUMBERS {
+    uuid id PK
+    uuid garage_id FK
+    text number UK
+    text purpose
+  }
+  CAMPAIGNS {
+    uuid id PK
+    uuid garage_id FK
+    text segment
+    text status
+  }
+  CAMPAIGN_SENDS {
+    uuid id PK
+    uuid campaign_id FK
+    text status
+    text skip_reason
+  }
+  JOBS {
+    uuid id PK
+    text kind
+    text dedupe_key UK
+    timestamptz run_at
+    text status
+    timestamptz locked_until
+  }
+  TWILIO_WEBHOOK_EVENTS {
+    text event_key PK
+    text kind
+    text processing_status
+  }
+  VEHICLE_FACTS {
+    text reg_hash PK
+    jsonb facts
+    timestamptz fetched_at
+  }
+</script>
+    <figcaption>Reminder rows exist only for consenting customers, and every send re-checks consent. <code>jobs</code>, <code>twilio_webhook_events</code> and <code>vehicle_facts</code> are platform tables with no API grants.</figcaption>
+  </figure>
+  <h3>Invoices, payments, plans and accounting</h3>
+  <figure class="diagram" data-title="Invoices, payments, plans and accounting">
+    <header><h3>Invoices, payments, plans and accounting</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="erd-money">
+erDiagram
+  BOOKINGS ||--o{ INVOICES : "invoiced as"
+  INVOICES ||--o{ INVOICE_ITEMS : "lines"
+  INVOICES ||--o{ INVOICE_PAYMENTS : "paid by"
+  BOOKINGS ||--o{ PAYMENTS : "deposit or no-show fee"
+  INVOICES ||--o{ PAYMENTS : "pay-by-link"
+  GARAGES ||--o| PAYMENT_ACCOUNTS : "Stripe Connect"
+  GARAGES ||--o{ SERVICE_PLANS : "sells"
+  SERVICE_PLANS ||--o{ CUSTOMER_PLAN_SUBSCRIPTIONS : "subscribed"
+  CUSTOMERS ||--o{ CUSTOMER_PLAN_SUBSCRIPTIONS : "pays by Direct Debit"
+  GARAGES ||--o{ BUSINESS_ACCOUNTS : "fleet and trade"
+  BUSINESS_ACCOUNTS ||--o{ BUSINESS_ACCOUNT_VEHICLES : "covers"
+  BUSINESS_ACCOUNTS ||--o{ ACCOUNT_STATEMENTS : "statements"
+  GARAGES ||--o{ ACCOUNTING_CONNECTIONS : "connects"
+  ACCOUNTING_CONNECTIONS ||--o{ ACCOUNTING_SYNC_ITEMS : "syncs"
+  GARAGES ||--o{ USAGE_EVENTS : "meters"
+  INVOICES {
+    uuid id PK
+    uuid garage_id FK
+    uuid booking_id FK
+    text invoice_number
+    int revision
+  }
+  INVOICE_ITEMS {
+    uuid id PK
+    uuid invoice_id FK
+    int unit_price_pence
+  }
+  INVOICE_PAYMENTS {
+    uuid id PK
+    uuid invoice_id FK
+    int amount_pence
+  }
+  PAYMENTS {
+    uuid id PK
+    uuid garage_id FK
+    text kind
+    text status
+    int amount_pence
+    text token_hash
+  }
+  PAYMENT_ACCOUNTS {
+    uuid id PK
+    uuid garage_id FK
+    text account_ref
+    boolean charges_enabled
+  }
+  SERVICE_PLANS {
+    uuid id PK
+    uuid garage_id FK
+    int price_pence
+    text status
+  }
+  CUSTOMER_PLAN_SUBSCRIPTIONS {
+    uuid id PK
+    uuid plan_id FK
+    uuid customer_id FK
+    text status
+    text mandate_ref
+  }
+  BUSINESS_ACCOUNTS {
+    uuid id PK
+    uuid garage_id FK
+    text kind
+    int payment_terms_days
+  }
+  BUSINESS_ACCOUNT_VEHICLES {
+    uuid id PK
+    uuid account_id FK
+    uuid vehicle_id FK
+  }
+  ACCOUNT_STATEMENTS {
+    uuid id PK
+    uuid account_id FK
+  }
+  ACCOUNTING_CONNECTIONS {
+    uuid id PK
+    uuid garage_id FK
+    text provider
+    text status
+  }
+  ACCOUNTING_SYNC_ITEMS {
+    uuid id PK
+    uuid connection_id FK
+    text entity
+    text remote_id
+    text status
+  }
+  USAGE_EVENTS {
+    uuid id PK
+    uuid garage_id FK
+    text metric
+    int quantity
+    text source_key UK
+  }
+</script>
+    <figcaption>Stripe objects are referenced by id only; card and bank details never reach Pitline. Accounting tokens are encrypted with AES-256-GCM under a server-side key.</figcaption>
+  </figure>
+  <h3>Pro operations</h3>
+  <figure class="diagram" data-title="Pro operations">
+    <header><h3>Pro operations</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="erd-pro">
+erDiagram
+  BOOKINGS ||--o{ HEALTH_CHECKS : "inspected in"
+  HEALTH_CHECKS ||--o{ HEALTH_CHECK_ITEMS : "items"
+  HEALTH_CHECK_ITEMS ||--o{ HEALTH_CHECK_MEDIA : "photos"
+  GARAGES ||--o{ COURTESY_CARS : "keeps"
+  COURTESY_CARS ||--o{ COURTESY_CAR_LOANS : "lent"
+  BOOKINGS ||--o{ COURTESY_CAR_LOANS : "with car"
+  BOOKINGS ||--o{ COURTESY_CAR_REQUESTS : "asks for car"
+  BOOKINGS ||--o{ COLLECTION_DELIVERY_LEGS : "collect and deliver"
+  RESOURCES ||--o{ COLLECTION_DELIVERY_LEGS : "van or driver"
+  GARAGE_GROUPS ||--o{ GARAGE_GROUP_SITES : "sites"
+  GARAGES ||--o{ GARAGE_GROUP_SITES : "member site"
+  HEALTH_CHECKS {
+    uuid id PK
+    uuid garage_id FK
+    uuid booking_id FK
+    text status
+    text token_hash
+  }
+  HEALTH_CHECK_ITEMS {
+    uuid id PK
+    uuid check_id FK
+    text rating
+    text decision
+    int price_pence
+  }
+  HEALTH_CHECK_MEDIA {
+    uuid id PK
+    uuid item_id FK
+    text object_path
+  }
+  COURTESY_CARS {
+    uuid id PK
+    uuid garage_id FK
+    text name
+    boolean active
+  }
+  COURTESY_CAR_LOANS {
+    uuid id PK
+    uuid car_id FK
+    uuid booking_id FK
+    tstzrange during
+    text status
+  }
+  COURTESY_CAR_REQUESTS {
+    uuid id PK
+    uuid booking_id FK
+    text status
+  }
+  COLLECTION_DELIVERY_LEGS {
+    uuid id PK
+    uuid booking_id FK
+    uuid resource_id FK
+    text kind
+  }
+  GARAGE_GROUPS {
+    uuid id PK
+    uuid garage_id FK
+    text name
+  }
+  GARAGE_GROUP_SITES {
+    uuid id PK
+    uuid group_id FK
+    uuid home_garage_id FK
+  }
+</script>
+    <figcaption>Courtesy car loans and collection and delivery legs have their own exclusion constraints. Health-check media sits in a private bucket behind short-lived signed URLs.</figcaption>
+  </figure>
+  <h3>All tables by domain</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Domain</th><th>Tables</th><th>What they hold</th></tr></thead>
+    <tbody>
+      <tr><td>Tenancy and staff (8)</td><td><code>garages</code>, <code>garage_domains</code>, <code>garage_members</code>, <code>garage_invites</code>, <code>garage_agreements</code>, <code>admin_profiles</code>, <code>site_settings</code>, <code>media_assets</code></td><td>Garages, their hosts, members, invites, DPA acceptance and site settings</td></tr>
+      <tr><td>Security, admin and audit (9)</td><td><code>admin_audit_log</code>, <code>admin_mfa_policy</code>, <code>admin_mfa_recovery_codes</code>, <code>admin_mfa_recovery_sessions</code>, <code>admin_trusted_devices</code>, <code>rate_limit_buckets</code>, <code>platform_admins</code>, <code>platform_impersonations</code>, <code>platform_audit_log</code></td><td>MFA, trusted devices, rate limits, platform admins, support sessions and audit logs</td></tr>
+      <tr><td>Booking engine (14)</td><td><code>resources</code>, <code>opening_hours</code>, <code>closures</code>, <code>services</code>, <code>service_prices</code>, <code>customers</code>, <code>vehicles</code>, <code>bookings</code>, <code>booking_events</code>, <code>booking_assignments</code>, <code>booking_audit_log</code>, <code>booking_notification_events</code>, <code>customer_imports</code>, <code>vehicle_facts</code></td><td>Resources, hours, services, customers, vehicles, bookings and their history; imports and the vehicle facts cache</td></tr>
+      <tr><td>Reminders, messaging and calls (10)</td><td><code>reminder_rules</code>, <code>reminder_sends</code>, <code>messages</code>, <code>calls</code>, <code>garage_phone_numbers</code>, <code>platform_calls</code>, <code>twilio_webhook_events</code>, <code>notification_attempts</code>, <code>campaigns</code>, <code>campaign_sends</code></td><td>Reminder rules and sends, messages, calls, numbers, campaigns and the Twilio event ledger</td></tr>
+      <tr><td>Enquiries and email (8)</td><td><code>enquiries</code>, <code>enquiry_attachments</code>, <code>enquiry_conversations</code>, <code>enquiry_messages</code>, <code>inbound_email_events</code>, <code>unmatched_inbound_emails</code>, <code>resend_webhook_events</code>, <code>platform_enquiries</code></td><td>Customer enquiries and their email threads, inbound mail ledgers and contact-page enquiries</td></tr>
+      <tr><td>Invoices and payments (10)</td><td><code>invoices</code>, <code>invoice_items</code>, <code>invoice_payments</code>, <code>invoice_number_sequences</code>, <code>invoice_email_sends</code>, <code>invoice_email_attempts</code>, <code>payments</code>, <code>payment_accounts</code>, <code>payment_settings</code>, <code>payment_webhook_events</code></td><td>Invoices and their email, deposits, pay-by-link and no-show fees through Stripe Connect</td></tr>
+      <tr><td>Plans and billing (5)</td><td><code>garage_subscriptions</code>, <code>plan_requests</code>, <code>usage_events</code>, <code>billing_usage_reports</code>, <code>billing_webhook_events</code></td><td>Garage subscriptions, plan requests and metered usage</td></tr>
+      <tr><td>Pro operations (9)</td><td><code>health_checks</code>, <code>health_check_items</code>, <code>health_check_media</code>, <code>courtesy_cars</code>, <code>courtesy_car_loans</code>, <code>courtesy_car_requests</code>, <code>collection_delivery_legs</code>, <code>garage_groups</code>, <code>garage_group_sites</code></td><td>Digital health checks, courtesy cars, collection and delivery, multi-site groups</td></tr>
+      <tr><td>Fleet accounts and service plans (11)</td><td><code>business_accounts</code>, <code>business_account_customers</code>, <code>business_account_vehicles</code>, <code>business_account_bookings</code>, <code>business_account_invoices</code>, <code>account_statements</code>, <code>service_plans</code>, <code>service_plan_inclusions</code>, <code>service_plan_uses</code>, <code>service_plan_invoice_applications</code>, <code>customer_plan_subscriptions</code></td><td>Trade and fleet accounts with statements; customer service plans by Direct Debit</td></tr>
+      <tr><td>Accounting sync (3)</td><td><code>accounting_connections</code>, <code>accounting_connection_secrets</code>, <code>accounting_sync_items</code></td><td>Connections to Xero, QuickBooks and Sage, encrypted tokens and the sync ledger</td></tr>
+      <tr><td>AI front desk and agents (3)</td><td><code>agent_tokens</code>, <code>agent_call_log</code>, <code>ai_front_desk_settings</code></td><td>Agent tokens, the agent call log and per-garage AI desk settings</td></tr>
+      <tr><td>Platform jobs (1)</td><td><code>jobs</code></td><td>The background job queue</td></tr>
+      <tr><td>Carried over from SOB (2)</td><td><code>offers</code>, <code>reviews</code></td><td>Marketing content tables kept from the fork</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="deployment">
+  <h2>Deployment &amp; CI/CD</h2>
+  <p class="sub">Everything runs in London. The app deploys through Vercel's Git integration; the two containers deploy by hand from <code>main</code> through GitHub Actions with Workload Identity Federation.</p>
+  <figure class="diagram" data-title="Runtime topology">
+    <header><h3>Runtime topology</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="deploy">
+flowchart LR
+  dev["Developer or agent<br/>pull request"]:::person
+  subgraph gh["GitHub"]
+    repo["vitalos-technologies/pitline"]:::infra
+    actions["GitHub Actions<br/>self-hosted runners"]:::infra
+    ghcr[("GHCR private images<br/>autofix-superadmin, autofix-voice")]:::db
+  end
+  subgraph vercel["Vercel, London region lhr1"]
+    prod["Production<br/>pitline.co.uk and *.pitline.co.uk"]:::web
+    preview["Preview per pull request"]:::web
+    cron["Vercel Cron<br/>daily 11:00 UTC"]:::infra
+  end
+  subgraph gcp["Google Cloud, London"]
+    ar[("Artifact Registry<br/>remote ghcr mirror")]:::db
+    sa["Cloud Run: pitline-superadmin"]:::web
+    voice["Cloud Run: pitline-voice"]:::svc
+    jobs["Cloud Run jobs<br/>release, notify"]:::svc
+    sched["Cloud Scheduler<br/>every 5 minutes"]:::infra
+    sm[("Secret Manager")]:::sec
+  end
+  subgraph supa["Supabase, London"]
+    db[("Postgres 17, Auth, Storage")]:::db
+  end
+  dev --> repo
+  repo -- "Git integration" --> preview
+  repo -- "merge to main" --> prod
+  repo --> actions
+  actions -- "build and push" --> ghcr
+  ghcr --> ar
+  ar --> sa
+  ar --> voice
+  ar --> jobs
+  actions -- "Workload Identity, no keys" --> sa
+  actions -- "deploy" --> voice
+  actions -- "env sync, launch ops" --> prod
+  sched --> jobs
+  sm --> sa
+  sm --> voice
+  cron -- "GET /api/cron/daily" --> prod
+  prod --> db
+  sa --> db
+  jobs --> db
+classDef person fill:#081a2a,stroke:#081a2a,color:#ffffff
+classDef web fill:#dce4ff,stroke:#2457ff,color:#081a2a
+classDef svc fill:#e6f4f2,stroke:#007e76,color:#081a2a
+classDef db fill:#fff6e0,stroke:#9a6700,color:#081a2a
+classDef infra fill:#f4ecff,stroke:#7a3fd1,color:#081a2a
+classDef sec fill:#fdecea,stroke:#c9372c,color:#081a2a
+</script>
+    <figcaption>Cloud Run pulls the private GHCR images through an Artifact Registry remote repository. The services moved from Azure Container Apps to Cloud Run on 1 Nov 2026 (DECISIONS D25).</figcaption>
+  </figure>
+  <figure class="diagram" data-title="CI/CD pipeline">
+    <header><h3>CI/CD pipeline</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="cicd">
+flowchart LR
+  pr["Pull request<br/>or push to main"]:::infra
+  verify["verify<br/>lint, typecheck, unit, build"]:::infra
+  voicejob["voice-service<br/>pnpm verify"]:::infra
+  dbt["database-tests<br/>pgTAP, integration, tenancy,<br/>smoke, invoice PDFs"]:::infra
+  browser["browser-tests<br/>Playwright journeys and axe"]:::infra
+  lh["lighthouse<br/>booking routes"]:::infra
+  sachecks["Super Admin checks<br/>ruff, pytest, pip-audit, bandit"]:::infra
+  saint["Super Admin integration<br/>local Supabase, image, smoke"]:::infra
+  merge["Merge on green"]:::sec
+  vercelprod["Vercel production deploy"]:::web
+  manual["Manual workflows<br/>Super Admin deploy, Voice desk deploy,<br/>Sync Vercel env, Launch ops"]:::infra
+  pr --> verify
+  pr --> voicejob
+  pr --> sachecks
+  verify --> dbt
+  verify --> browser
+  verify --> lh
+  sachecks --> saint
+  dbt --> merge
+  browser --> merge
+  lh --> merge
+  voicejob --> merge
+  saint --> merge
+  merge --> vercelprod
+  merge -. "run by hand from main" .-> manual
+classDef web fill:#dce4ff,stroke:#2457ff,color:#081a2a
+classDef infra fill:#f4ecff,stroke:#7a3fd1,color:#081a2a
+classDef sec fill:#fdecea,stroke:#c9372c,color:#081a2a
+</script>
+    <figcaption>All jobs run on self-hosted runners (GitHub-hosted runners were blocked by org billing). Pull request jobs run only for branches in this repository.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Workflow</th><th>Trigger</th><th>What it does</th><th>Target</th></tr></thead>
+    <tbody>
+      <tr><td><code>ci.yml</code></td><td>PR, push to main</td><td>verify, voice-service, database-tests (pgTAP, integration, tenancy, smoke), browser-tests (Playwright, axe), lighthouse</td><td>None</td></tr>
+      <tr><td><code>superadmin.yml</code></td><td>PR, push touching <code>superadmin/</code> or migrations</td><td>ruff, pytest on PostgreSQL 17, pip-audit, bandit; integration, image build and browser smoke</td><td>None</td></tr>
+      <tr><td><code>superadmin-deploy.yml</code></td><td>By hand</td><td>Build, push, deploy service and jobs, check the proxy gate, set Vercel proxy variables</td><td>Cloud Run, Vercel</td></tr>
+      <tr><td><code>voice-deploy.yml</code></td><td>By hand</td><td>Build and deploy the voice desk, check the relay refuses unsigned calls, set relay variables</td><td>Cloud Run, Vercel</td></tr>
+      <tr><td><code>vercel-env.yml</code></td><td>By hand</td><td>Copy named repository secrets and variables into Vercel</td><td>Vercel</td></tr>
+      <tr><td><code>launch-ops.yml</code></td><td>By hand</td><td>Launch tasks for domains, secrets, Twilio, Resend, Supabase and Stripe test setup; report-only unless applied</td><td>Providers</td></tr>
+    </tbody>
+  </table></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Environment</th><th>App</th><th>Database</th><th>Messaging and payments</th></tr></thead>
+    <tbody>
+      <tr><td>Local</td><td><code>pnpm dev</code>, garage hosts as <code>&lt;slug&gt;.localhost:3000</code></td><td>Supabase CLI stack, fictional demo seed</td><td>Mocks</td></tr>
+      <tr><td>CI</td><td>Production build on a per-runner port</td><td>Isolated Supabase stack per runner slot</td><td>Mocks, no secrets</td></tr>
+      <tr><td>Preview</td><td>Vercel preview per PR</td><td>Hosted project, Preview-only secrets</td><td>Mock unless configured</td></tr>
+      <tr><td>Production</td><td><code>pitline.co.uk</code> and garage hosts</td><td>Hosted Supabase project, London, Free plan</td><td>Messaging live on a Twilio trial account; Stripe test mode only</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">On the Vercel Hobby plan there is one cron, <code>/api/cron/daily</code> at 11:00 UTC, which queues the day's platform jobs and drains the queue for up to 20 seconds. Booking notifications, HELP answers and missed-call text-backs are drained straight after the request that queued them. Cloud Scheduler runs the super admin's notify job every 5 minutes.</div>
+</section>
+
+<section id="flows">
+  <h2>Key flows</h2>
+  <p class="sub">The journeys that matter most, step by step.</p>
+  <figure class="diagram" data-title="Online booking">
+    <header><h3>1. Online booking on a garage host</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="flow-booking">
+sequenceDiagram
+  autonumber
+  actor C as Car owner
+  participant P as Proxy
+  participant B as Booking pages
+  participant E as Booking engine
+  participant DB as Postgres
+  participant Q as Job queue
+  C->>P: GET book.garage.co.uk
+  P->>DB: Resolve host to garage, 60 s cache
+  P->>B: Rewrite to /_site/garageId
+  C->>B: Steps 1 to 4, vehicle, service, time, details
+  Note over C,B: State lives in the sealed af_booking cookie,<br/>never in the URL
+  B->>E: getAvailableSlots for the garage
+  E->>DB: available_slots()
+  C->>B: Confirm, with Turnstile token
+  B->>E: createBooking with idempotency key
+  E->>DB: create_booking() in one transaction
+  alt Slot still free
+    DB-->>E: booking, reference
+    E->>Q: enqueue notifications.booking
+    B-->>C: Confirmed page with reference
+  else no_overlap or SLOT_UNAVAILABLE
+    DB-->>E: SLOT_UNAVAILABLE
+    B-->>C: Three nearest free slots
+  end
+  Q-->>C: Email with calendar file, text on chosen channel
+</script>
+    <figcaption>Booking state is a sealed httpOnly cookie, so a registration never appears in a URL, analytics event or ordinary log.</figcaption>
+  </figure>
+  <figure class="diagram" data-title="Reminder win-back">
+    <header><h3>2. MOT or service reminder that wins a booking back</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="flow-reminder">
+sequenceDiagram
+  autonumber
+  participant VC as Vercel Cron
+  participant R as Job runner
+  participant DB as Postgres
+  participant T as Twilio
+  actor C as Customer
+  participant B as Booking pages
+  VC->>R: GET /api/cron/daily with bearer secret
+  R->>DB: schedule_reminders() per active garage
+  Note over R,DB: Only consenting, not opted-out customers,<br/>MOT rows only when mot_enabled
+  R->>R: reminders.send, inside 09:00 to 19:00 Mon to Sat?
+  alt Outside the send window
+    R->>DB: Re-queue at the next window
+  else Inside the window
+    R->>DB: claim_reminder_sends() re-checks consent
+    R->>T: Send SMS or WhatsApp with /r/token link
+    T-->>R: Accepted, provider id
+    T->>R: Delivery status webhook, signature checked
+  end
+  C->>B: Opens /r/token
+  B->>DB: Hash token, mark opened
+  B-->>C: Prefilled booking draft in sealed cookie
+  C->>B: Completes booking
+  B->>DB: create_booking() credits the reminder
+</script>
+    <figcaption>Scheduling and consent checks live in SQL. A booking made from the link is credited to the reminder in the same transaction.</figcaption>
+  </figure>
+  <figure class="diagram" data-title="AI voice desk">
+    <header><h3>3. Missed call answered by the AI voice desk (Pro)</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="flow-voice">
+sequenceDiagram
+  autonumber
+  actor X as Caller
+  participant T as Twilio
+  participant W as Voice webhook
+  participant V as Voice desk
+  participant A as Agent tool API
+  participant L as Claude
+  X->>T: Calls the garage number
+  T->>W: POST /api/webhooks/twilio/voice, signed
+  W->>T: Ring the garage phone first
+  alt Missed and Pro with AI minutes left
+    W->>T: Disclosure, then ConversationRelay to the voice desk
+    T->>V: WebSocket with signed claim
+    V->>A: Exchange claim for a per-call agent token
+    loop Each turn
+      V->>L: Streamed turn with tools
+      L-->>V: Tool call
+      V->>A: available_slots, lookup_vehicle, create_booking
+      A-->>V: Result, bookings stay requests
+    end
+    V->>A: report_usage, log_call_summary
+  else Essentials, over allowance or desk down
+    W->>T: Voicemail
+    W->>W: Queue calls.text_back
+  end
+</script>
+    <figcaption>The desk can only use the agent tool API with a token for that one call. If the service is down or the garage is over its minutes, the caller gets voicemail and a text-back.</figcaption>
+  </figure>
+  <figure class="diagram" data-title="Custom domain">
+    <header><h3>4. Connecting a garage's own booking domain</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="flow-domain">
+sequenceDiagram
+  autonumber
+  actor O as Garage owner
+  participant AD as Garage admin
+  participant DB as Postgres
+  participant VD as Vercel Domains API
+  participant R as Job runner
+  O->>AD: Enter book.theirgarage.co.uk
+  AD->>VD: Add domain to the project
+  AD->>DB: garage_domains row, pending_dns
+  AD-->>O: CNAME record to add at their DNS host
+  loop domains.check, up to 48 hours
+    R->>VD: Read domain config
+    VD-->>R: Misconfigured, verifying or valid
+    R->>DB: Update status
+  end
+  Note over DB: Once active, the proxy serves the<br/>garage on that host with its own CSP
+</script>
+    <figcaption>Vercel issues the certificate. Domain additions go through the job queue because Vercel limits additions per hour.</figcaption>
+  </figure>
+  <figure class="diagram" data-title="Super admin change">
+    <header><h3>5. A Vitalos staff change in the super admin</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="flow-superadmin">
+sequenceDiagram
+  autonumber
+  actor S as Vitalos staff
+  participant P as Proxy
+  participant D as Django super admin
+  participant DB as Pitline Postgres
+  S->>P: /superadmin/...
+  P->>D: Forward with proxy secret, afsa cookies only
+  D->>D: Password, axes lockout, TOTP
+  S->>D: Change a garage plan, with reason
+  D->>D: Fresh TOTP step-up, role check
+  D->>DB: platform_update_garage() as linked platform admin
+  DB->>DB: Write platform_audit_log and garage audit log
+  DB-->>D: Updated
+  D->>D: Append to its own audit trail
+</script>
+    <figcaption>Writes never bypass Pitline's rules: the function re-checks the linked platform admin and writes both audit logs.</figcaption>
+  </figure>
+</section>
+
+<section id="security">
+  <h2>Security</h2>
+  <p class="sub">Trust boundaries, authentication and authorisation, secrets handling and data protection.</p>
+  <figure class="diagram" data-title="Trust boundaries">
+    <header><h3>Trust boundaries</h3><div class="tools"></div></header>
+    <div class="canvas mmd"></div>
+<script type="text/plain" class="mmd" data-name="trust">
+flowchart LR
+  subgraph pub["Untrusted: public internet"]
+    browser(["Browsers"]):::person
+    callers(["Callers"]):::person
+    agentsx["AI agents with tokens"]:::ext
+  end
+  subgraph edgectl["Edge controls"]
+    proxy["Proxy: host to garage,<br/>CSP, frame-ancestors"]:::sec
+    turnstile["Turnstile and rate limits"]:::sec
+    sig["Webhook signatures<br/>Twilio, Stripe, Resend, Cloudflare"]:::sec
+  end
+  subgraph app["Trusted: application"]
+    nextjs["Next.js server code"]:::web
+    voice["Voice desk"]:::svc
+    sa["Super admin"]:::web
+  end
+  subgraph data["Restricted: data"]
+    rls[("Tenant tables, RLS on garage_id")]:::db
+    svcfn[("Service-role functions<br/>create_booking, claim_jobs")]:::db
+    views[("superadmin views, masked")]:::db
+  end
+  browser --> proxy --> nextjs
+  browser --> turnstile --> nextjs
+  callers --> sig
+  agentsx -- "hashed token, scopes" --> nextjs
+  sig --> nextjs
+  nextjs -- "user JWT plus x-garage-id" --> rls
+  nextjs -- "service role, server only" --> svcfn
+  voice -- "per-call token" --> nextjs
+  sa -- "autofix_superadmin, read-only sessions" --> views
+classDef person fill:#081a2a,stroke:#081a2a,color:#ffffff
+classDef web fill:#dce4ff,stroke:#2457ff,color:#081a2a
+classDef svc fill:#e6f4f2,stroke:#007e76,color:#081a2a
+classDef db fill:#fff6e0,stroke:#9a6700,color:#081a2a
+classDef ext fill:#f1f3f5,stroke:#536273,color:#26333f,stroke-dasharray:4 3
+classDef sec fill:#fdecea,stroke:#c9372c,color:#081a2a
+</script>
+    <figcaption>Public traffic passes host routing, bot checks or signature checks before server code runs. Server code reaches data either as the signed-in user with RLS or as the service role through functions that filter by garage.</figcaption>
+  </figure>
+  <div class="grid-3">
+    <div class="card"><span class="tag sec">Auth</span><h4>Authentication</h4><ul><li>Staff: Supabase Auth, TOTP mandatory for owners</li><li>Platform admins: AAL2 on every platform function</li><li>Django super admin: lockout, TOTP, fresh code per change</li><li>Car owners: signed manage links, no account</li></ul></div>
+    <div class="card"><span class="tag sec">Access</span><h4>Authorisation</h4><ul><li>RLS on <code>garage_id</code>; garage from host or selected membership</li><li>Owner, manager, technician roles</li><li>Booking and job functions for the service role only</li><li>Support sessions read-only, two hours at most</li></ul></div>
+    <div class="card"><span class="tag sec">Machines</span><h4>Agents and webhooks</h4><ul><li>Agent tokens: peppered HMAC, tool scopes, Pro for Workforce</li><li>Voice desk: 5-minute signed claim, per-call token</li><li>Twilio, Stripe, Resend and Cloudflare signatures</li><li>Cron and drain: bearer secret, constant-time check</li></ul></div>
+    <div class="card"><span class="tag sec">Secrets</span><h4>Where secrets live</h4><p>Vercel environment variables (Sensitive), GitHub Actions secrets, Google Secret Manager for Cloud Run. No secret uses a <code>NEXT_PUBLIC_</code> name. Deploys use Workload Identity Federation, not stored keys.</p></div>
+    <div class="card"><span class="tag sec">Privacy</span><h4>Data protection</h4><ul><li>All data and compute in London</li><li>Registrations kept out of URLs, analytics and logs</li><li>Stored consent with exact wording; STOP honoured at once</li><li>Message bodies cleared after 12 months</li></ul></div>
+    <div class="card"><span class="tag sec">Abuse</span><h4>Abuse controls</h4><ul><li>Turnstile and per-IP, per-garage rate limits</li><li>Idempotency keys on bookings</li><li>Per-host CSP and <code>frame-ancestors</code></li><li><code>no-referrer</code> on token links</li></ul></div>
+  </div>
+</section>
+
+<section id="decisions">
+  <h2>Decisions &amp; risks</h2>
+  <p class="sub">Decisions on record in <a href="../docs/autofix/DECISIONS.md">docs/autofix/DECISIONS.md</a> that shape the architecture, and the open risks visible in the code and docs.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Record</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D4</a></td><td>Garage domains through Vercel's custom-domain API, not Cloudflare for SaaS.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D5</a></td><td>A native scheduling engine in Postgres replaces Cal.com.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D7</a></td><td>Fork SOB Autofix onto Supabase rather than build on the Workforce backend.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D17</a></td><td>Two plans, Essentials and Pro, with a 14-day Pro trial; entitlements checked in code and SQL.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D18</a></td><td>A Django super admin modelled on the Vitalos platform Super Admin, served at <code>/superadmin</code> behind the app's proxy.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D20</a></td><td>The AI front desk on calls is Pitline's own voice service over Twilio ConversationRelay, not Workforce.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D23</a></td><td>Autofix renamed to Pitline on <code>pitline.co.uk</code>; internal names (<code>AUTOFIX_*</code>, <code>autofix_superadmin</code>) stay.</td></tr>
+      <tr><td><a href="../docs/autofix/DECISIONS.md">D25</a></td><td>Containers moved from Azure Container Apps to Cloud Run in London, with Workload Identity Federation for deploys.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Risk</th><th>Where it stands</th></tr></thead>
+    <tbody>
+      <tr><td>Supabase Free plan: no point-in-time recovery, pauses when idle</td><td>Pro and PITR to be decided before the first paying garage</td></tr>
+      <tr><td>Vercel Hobby: one daily cron, non-commercial use</td><td>Reminders go out once a day; Vercel Pro decision pending</td></tr>
+      <tr><td>CI depends on self-hosted runners on one machine</td><td>Fallback runner scripts exist in <code>infrastructure/runner</code></td></tr>
+      <tr><td>Scale-to-zero voice desk can drop the first call of a cold start to voicemail</td><td>Keeping one instance warm is an open cost decision</td></tr>
+      <tr><td>Twilio trial account limits who can call in and receive texts</td><td>Upgrade and a UK mobile number await owner approval</td></tr>
+      <tr><td>Two super admins (Next.js <code>/admin</code> and Django)</td><td>Both write the same platform audit log; retiring <code>/admin</code> is open</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout warn"><strong>Doc drift found.</strong> <code>docs/autofix/SPEC.md</code> still says Workforce answers calls and that the host map is cached "at the edge"; the code uses Pitline's own voice desk (D20) and a 60-second in-memory cache in <code>src/lib/tenancy/resolve.ts</code>. <code>superadmin/README.md</code> says the super admin is "not deployed yet", while D25 and <code>INFRA.md</code> describe it running on Cloud Run. <code>infrastructure/RUNNER.md</code> still names an Azure VM as the primary runner, although D25 records the Azure credit ending on 1 Nov 2026.</div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Snapshot of <code>vitalos-technologies/pitline</code> at <code>82578f9</code>, 3 Nov 2026. Diagram sources live in the Markdown files next to this page:
+      <a href="README.md">README</a> · <a href="01-context-containers.md">Context and containers</a> · <a href="02-data-model.md">Data model</a> ·
+      <a href="03-deployment-cicd.md">Deployment and CI/CD</a> · <a href="04-flows-security.md">Flows and security</a>.</p>
+    <p>Sources inspected: <code>docs/autofix/</code> (SPEC, ARCHITECTURE, INFRA, DECISIONS, BUILD-PLAN, askbridge, voice-desk), <code>superadmin/README.md</code>, <code>infrastructure/RUNNER.md</code>, <code>src/proxy.ts</code>, <code>src/lib/</code>, <code>src/app/</code>, <code>services/voice/</code>, <code>supabase/migrations/</code>, <code>.github/workflows/</code>, <code>vercel.json</code>, <code>package.json</code>.</p>
+    <p>Portfolio map: see <code>vitalos-technologies/vitalos-platform</code>, <code>arch/portfolio/</code>.</p>
+  </div>
+</footer>
+
+<dialog id="zoom" aria-labelledby="zoom-title">
+  <div class="bar"><h3 id="zoom-title">Diagram</h3><div>
+    <button class="icon-btn" type="button" data-z="out" aria-label="Zoom out">−</button>
+    <button class="icon-btn" type="button" data-z="fit">Fit</button>
+    <button class="icon-btn" type="button" data-z="in" aria-label="Zoom in">+</button>
+    <button class="icon-btn" type="button" data-z="close">Close</button>
+  </div></div>
+  <div class="stage"></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var KEY = "vitalos-arch-theme";
+  try { var saved = localStorage.getItem(KEY); if (saved === "light" || saved === "dark") root.setAttribute("data-theme", saved); } catch (e) {}
+  var mq = window.matchMedia("(prefers-color-scheme: dark)");
+  function theme() { return root.getAttribute("data-theme") || (mq.matches ? "dark" : "light"); }
+  function v(name) { return getComputedStyle(root).getPropertyValue(name).trim(); }
+
+  function dedent(s) {
+    var lines = s.replace(/\t/g, "  ").split("\n");
+    while (lines.length && !lines[0].trim()) lines.shift();
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    var min = Infinity;
+    lines.forEach(function (l) { if (l.trim()) min = Math.min(min, l.match(/^ */)[0].length); });
+    return lines.map(function (l) { return l.slice(min === Infinity ? 0 : min); }).join("\n");
+  }
+  var KINDS = ["person", "web", "svc", "db", "ext", "infra", "sec"];
+  function classDefs() {
+    return KINDS.map(function (k) {
+      var fg = k === "person" ? v("--n-person-fg") : v("--text");
+      return "classDef " + k + " fill:" + v("--n-" + k + "-bg") + ",stroke:" + v("--n-" + k + "-line") + ",color:" + fg + (k === "ext" ? ",stroke-dasharray:4 3" : "");
+    }).join("\n");
+  }
+  function themeVars() {
+    var dark = theme() === "dark";
+    return {
+      darkMode: dark, fontFamily: v("--font"), fontSize: "15px",
+      background: v("--surface"), primaryColor: v("--n-web-bg"), primaryBorderColor: v("--n-web-line"), primaryTextColor: v("--text"),
+      secondaryColor: v("--n-svc-bg"), secondaryBorderColor: v("--n-svc-line"), secondaryTextColor: v("--text"),
+      tertiaryColor: v("--surface-2"), tertiaryBorderColor: v("--border"), tertiaryTextColor: v("--text"),
+      mainBkg: v("--n-web-bg"), nodeBorder: v("--n-web-line"), nodeTextColor: v("--text"), textColor: v("--text"),
+      lineColor: v("--edge"), clusterBkg: v("--surface-2"), clusterBorder: v("--boundary"), titleColor: v("--text"),
+      edgeLabelBackground: v("--surface"), labelBackground: v("--surface"),
+      actorBkg: v("--n-web-bg"), actorBorder: v("--n-web-line"), actorTextColor: v("--text"), actorLineColor: v("--boundary"),
+      signalColor: v("--edge"), signalTextColor: v("--text"), labelBoxBkgColor: v("--surface-2"), labelBoxBorderColor: v("--border"),
+      labelTextColor: v("--text"), loopTextColor: v("--text"), noteBkgColor: v("--n-db-bg"), noteBorderColor: v("--n-db-line"), noteTextColor: v("--text"),
+      activationBkgColor: v("--n-svc-bg"), activationBorderColor: v("--n-svc-line"), sequenceNumberColor: dark ? "#081a2a" : "#ffffff",
+      attributeBackgroundColorOdd: v("--surface"), attributeBackgroundColorEven: v("--surface-2"),
+      git0: v("--accent"), cScale0: v("--n-web-bg"), cScale1: v("--n-svc-bg"), cScale2: v("--n-db-bg")
+    };
+  }
+  var seq = 0;
+  async function renderAll() {
+    window.__archErrors = [];
+    window.__archRendered = false;
+    var blocks = document.querySelectorAll("script.mmd");
+    if (!window.mermaid) {
+      blocks.forEach(function (s) {
+        var c = s.parentElement.querySelector(".canvas"); c.textContent = "";
+        var pre = document.createElement("pre"); pre.className = "mmd-fallback"; pre.textContent = dedent(s.textContent); c.appendChild(pre);
+      });
+      window.__archRendered = true; return;
+    }
+    window.mermaid.initialize({
+      startOnLoad: false, theme: "base", securityLevel: "strict", themeVariables: themeVars(),
+      flowchart: { curve: "basis", padding: 14, nodeSpacing: 46, rankSpacing: 56, htmlLabels: true },
+      sequence: { useMaxWidth: true, mirrorActors: false, showSequenceNumbers: true, boxMargin: 8, messageFontSize: 14 },
+      er: { useMaxWidth: true, layoutDirection: "TB", minEntityWidth: 120, fontSize: 13 }
+    });
+    for (var i = 0; i < blocks.length; i++) {
+      var s = blocks[i], c = s.parentElement.querySelector(".canvas");
+      var src = dedent(s.textContent).replace(/^[ \t]*classDef[ \t]+(person|web|svc|db|ext|infra|sec)\b.*$/gm, "");
+      if (/^\s*(flowchart|graph)\b/.test(src)) src += "\n" + classDefs();
+      var id = "mmd-" + (++seq);
+      try {
+        var out = await window.mermaid.render(id, src);
+        c.innerHTML = out.svg;
+        var el = c.querySelector("svg"), vb = el && el.viewBox && el.viewBox.baseVal;
+        if (vb && vb.width) { el.style.maxWidth = Math.round(vb.width) + "px"; el.style.minWidth = Math.round(Math.min(vb.width, 720)) + "px"; }
+      } catch (e) {
+        var stray = document.getElementById("d" + id); if (stray) stray.remove();
+        window.__archErrors.push({ name: s.dataset.name || ("block " + i), message: String((e && e.message) || e) });
+        c.textContent = "";
+        var err = document.createElement("pre"); err.className = "mmd-error"; err.textContent = "Diagram failed to render: " + ((e && e.message) || e); c.appendChild(err);
+        var pre = document.createElement("pre"); pre.className = "mmd-fallback"; pre.textContent = dedent(s.textContent); c.appendChild(pre);
+      }
+    }
+    window.__archRendered = true;
+  }
+
+  // Figure tools: Expand and Source
+  var dlg = document.getElementById("zoom"), stage = dlg.querySelector(".stage"), scale = 1;
+  function applyScale() { var svg = stage.querySelector("svg"); if (!svg) return; var w = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width; svg.style.width = (w ? w * scale : 1000 * scale) + "px"; }
+  function fit() { var svg = stage.querySelector("svg"); if (!svg) return; var w = (svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width) || 1000; scale = Math.max(0.2, Math.min(3, (stage.clientWidth - 32) / w)); applyScale(); }
+  dlg.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-z]"); if (!b) { if (e.target === dlg) dlg.close(); return; }
+    var z = b.getAttribute("data-z");
+    if (z === "close") dlg.close(); else if (z === "fit") fit(); else { scale = Math.max(0.2, Math.min(4, scale * (z === "in" ? 1.25 : 0.8))); applyScale(); }
+  });
+  document.querySelectorAll("figure.diagram").forEach(function (fig) {
+    var tools = fig.querySelector(".tools"); if (!tools) return;
+    var ex = document.createElement("button"); ex.type = "button"; ex.textContent = "Expand";
+    ex.addEventListener("click", function () {
+      var svg = fig.querySelector(".canvas > svg"); if (!svg) return;
+      stage.textContent = ""; var copy = svg.cloneNode(true); copy.removeAttribute("id"); copy.style.maxWidth = "none"; copy.style.minWidth = "0";
+      copy.querySelectorAll("[id]").forEach(function (n) { if (n.tagName.toLowerCase() === "marker") return; });
+      stage.appendChild(copy); dlg.querySelector("#zoom-title").textContent = fig.getAttribute("data-title") || "Diagram";
+      dlg.showModal(); fit();
+    });
+    tools.appendChild(ex);
+    var mmd = fig.querySelector("script.mmd");
+    if (mmd) {
+      var sb = document.createElement("button"); sb.type = "button"; sb.textContent = "Source"; sb.setAttribute("aria-expanded", "false");
+      sb.addEventListener("click", function () {
+        var pre = fig.querySelector("pre.mmd-src");
+        if (pre) { pre.remove(); sb.setAttribute("aria-expanded", "false"); return; }
+        pre = document.createElement("pre"); pre.className = "mmd-src"; pre.textContent = dedent(mmd.textContent);
+        fig.insertBefore(pre, fig.querySelector("figcaption")); sb.setAttribute("aria-expanded", "true");
+      });
+      tools.appendChild(sb);
+    }
+  });
+
+  // Theme toggle
+  document.getElementById("theme-toggle").addEventListener("click", function () {
+    var next = theme() === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    renderAll();
+  });
+  mq.addEventListener("change", function () { if (!root.getAttribute("data-theme")) renderAll(); });
+
+  // Active section highlight
+  var links = Array.prototype.slice.call(document.querySelectorAll(".tabs a"));
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (a) { a.classList.toggle("active", a.getAttribute("href") === "#" + en.target.id); });
+      });
+    }, { rootMargin: "-40% 0px -55% 0px" });
+    document.querySelectorAll("main section[id]").forEach(function (s) { io.observe(s); });
+  }
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
