@@ -28,7 +28,7 @@ This folder is a snapshot of the architecture, drawn from the code at `82578f9` 
 
 ## How to view
 
-Open `index.html` in a browser. Diagrams render with Mermaid loaded from jsDelivr; offline, each diagram shows its source instead. The Markdown files render on GitHub.
+Open `index.html` in a browser. Every diagram is pre-rendered into the page in light and dark versions, so it works offline and in app file viewers; a diagram edited without re-baking renders live from jsDelivr (`mermaid@11.4.1`) instead. The Markdown files render on GitHub. After editing a Mermaid diagram, re-bake the page with the Vitalos archkit bake script so it keeps working offline.
 
 ## How to update
 
