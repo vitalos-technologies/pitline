@@ -3,7 +3,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ContactPage, { metadata } from "@/app/contact/page";
+import ContactPage, { metadata } from "@/app/(marketing)/contact/page";
 import { marketing } from "@/lib/marketing/content";
 
 function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
