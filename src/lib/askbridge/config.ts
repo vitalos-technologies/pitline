@@ -1,6 +1,7 @@
 /**
- * Askbridge chat on a garage's booking pages (P4.6): per-garage setting and the widget script location.
- * Pure and client-safe (no secrets here). Contract: `docs/autofix/askbridge.md`.
+ * Askbridge chat on a garage's booking pages (P4.6) and on Pitline's own marketing pages (D28): the
+ * per-garage setting, Pitline's site key and the widget script location. Pure and client-safe (no secrets
+ * here). Contract: `docs/autofix/askbridge.md`.
  *
  * Per garage: `garages.settings.askbridge = { enabled: boolean, siteKey: string | null }`, set by the owner
  * on /app/settings/booking-page. The site key comes from the garage's own Askbridge workspace. Platform:
@@ -78,4 +79,23 @@ export function askbridgeAllowedOrigins(freeLinkOrigin: string, customHostname?:
   const custom = customHostname?.trim().toLowerCase();
   if (custom) origins.push(`https://${custom}`);
   return [...new Set(origins)];
+}
+
+/**
+ * Askbridge chat on Pitline's own marketing pages (`/`, `/contact`; DECISIONS D28), never the garage admin,
+ * the super admin or garage booking sites (those use the garage's own key above). The site key is
+ * Pitline's own Askbridge site, `NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY`; unset or malformed renders nothing.
+ */
+export function pitlineAskbridgeWidget(
+  env: Env = {
+    NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY: process.env.NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY,
+    NEXT_PUBLIC_ASKBRIDGE_WIDGET_URL: process.env.NEXT_PUBLIC_ASKBRIDGE_WIDGET_URL,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+  },
+): AskbridgeWidget | null {
+  const siteKey = parseAskbridgeSiteKey(env.NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY);
+  if (!siteKey) return null;
+  const url = askbridgeScriptUrl(env);
+  if (!url) return null;
+  return { scriptUrl: url.toString(), origin: url.origin, siteKey };
 }

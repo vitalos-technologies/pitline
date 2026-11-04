@@ -66,7 +66,7 @@ if (stripeKey && !(stripeLive ? /^(sk|rk)_live_/ : /^(sk|rk)_test_/).test(stripe
 }
 
 // Modes and plan settings are not secret: show their values so the log says what production runs.
-const SHOWN = /^(MESSAGING_MODE|BILLING_PROVIDER|BILLING_COLLECT_VAT|STRIPE_LIVE_MODE|PAYMENTS_PROVIDER|PLACES_PROVIDER|VEHICLE_LOOKUP_PROVIDER|VERCEL_DOMAINS_MODE|PLAN_[A-Z_]+|SMS_SEGMENT_COST_PENCE|LEGAL_COPY_APPROVED|COOKIE_CONFIGURATION_APPROVED)$/;
+const SHOWN = /^(MESSAGING_MODE|BILLING_PROVIDER|BILLING_COLLECT_VAT|STRIPE_LIVE_MODE|PAYMENTS_PROVIDER|PLACES_PROVIDER|VEHICLE_LOOKUP_PROVIDER|VERCEL_DOMAINS_MODE|PLAN_[A-Z_]+|SMS_SEGMENT_COST_PENCE|LEGAL_COPY_APPROVED|COOKIE_CONFIGURATION_APPROVED|NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY)$/;
 for (const [key, { value, type }] of byKey) if (type === "encrypted" && SHOWN.test(key)) console.log(`value ${key}=${value}`);
 
 const url = `https://api.vercel.com/v10/projects/${encodeURIComponent(projectId)}/env?upsert=true&teamId=${encodeURIComponent(teamId)}`;

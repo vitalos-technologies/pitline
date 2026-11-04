@@ -89,3 +89,13 @@ The first version of this file defined a contract Askbridge never had: a `data-w
 
 - When a garage turns the chat off or leaves Pitline, its Askbridge workspace carries on (Pitline just stops loading the loader). Whether to tell the garage to cancel Askbridge separately is a product decision.
 - If Askbridge later offers a partner API (provisioning a workspace, or pushing services and opening hours), this integration can grow into it. Until then the booking page should be crawlable for Askbridge to learn from it.
+
+## Pitline's own marketing pages (D28)
+
+Pitline's own chat runs on the marketing pages only: `/` and `/contact` on the admin host, through the `(marketing)` route group's layout (`src/app/(marketing)/layout.tsx`). It uses Pitline's own Askbridge site, not a garage's:
+
+- **Key:** `NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY` (`pk_` + 32 hex; public, a plain GitHub variable synced to Vercel). Unset or malformed: no chat.
+- **Loader:** the same `NEXT_PUBLIC_ASKBRIDGE_WIDGET_URL` as booking pages (Askbridge's own when unset), loaded with `lazyOnload`.
+- **Never:** the garage admin (`/app/**`), sign-in, sign-up and onboarding, the super admin (`/superadmin`), or garage booking hosts (the proxy rewrites those to `/_site`, which has its own per-garage chat).
+- **CSP:** the admin host's policy is `frame-ancestors 'self'` only (`ADMIN_SECURITY_HEADERS`), so the loader, its API calls and Turnstile need no extra sources there.
+- **Setup:** in Askbridge, create a site for Pitline with allowed origins `https://pitline.co.uk` and `https://www.pitline.co.uk`, copy its site key, and set it as the repo variable `NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY`; then run Sync Vercel env and redeploy (a `NEXT_PUBLIC_` value is built into the pages).

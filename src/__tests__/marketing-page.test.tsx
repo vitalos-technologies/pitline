@@ -2,7 +2,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import HomePage, { metadata } from "@/app/page";
+import HomePage, { metadata } from "@/app/(marketing)/page";
 import robots from "@/app/robots";
 import { marketing } from "@/lib/marketing/content";
 
