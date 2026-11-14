@@ -1,0 +1,53 @@
+# Hosted migrations from Actions, started by Vitalos Pulse (Database tab: Check, then Apply) or by hand
+# (Actions > pulse-migrate > Run workflow). .github/pulse-migrate.py applies each file in supabase/migrations
+# that the hosted history lacks, one transaction per file together with its schema_migrations row, through the
+# Supabase Management API: no database password. "plan" lists what is pending and changes nothing; "apply" needs
+# confirm=APPLY and the exact list the plan showed (expected), and refuses destructive SQL (drop, rename, type
+# change, truncate, delete), which stays a reviewed manual change with a backup.
+# Uses what the repo already has: the SUPABASE_ACCESS_TOKEN secret and the NEXT_PUBLIC_SUPABASE_URL variable
+# (the project ref is read from it).
+#
+# The last line Pulse reads: PULSE_RESULT {"mode","tool","pending","destructive","applied","error"}
+name: pulse-migrate
+run-name: pulse-migrate ${{ inputs.mode }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "plan (list pending, change nothing) or apply"
+        type: choice
+        options: [plan, apply]
+        default: plan
+      confirm:
+        description: "Type APPLY to apply"
+        type: string
+        default: ""
+      expected:
+        description: "Comma-separated migrations the plan showed (Pulse sets this)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pulse-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: github.ref_name == 'main'
+    runs-on: ${{ fromJSON(vars.RUNS_ON || '["self-hosted","autofix"]') }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Plan or apply the hosted migrations (Supabase Management API)
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          EXPECTED: ${{ inputs.expected }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          MIGRATIONS_DIR: supabase/migrations
+        run: python3 .github/pulse-migrate.py

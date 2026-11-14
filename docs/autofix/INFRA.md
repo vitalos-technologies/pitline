@@ -119,6 +119,10 @@ gcloud artifacts repositories add-iam-policy-binding ghcr --location europe-west
 
 Then run **Voice desk deploy** with `CHECK`: its "Check the deploy identity" step proves the sign-in without deploying anything.
 
+## Hosted migrations (pulse-migrate)
+
+`.github/workflows/pulse-migrate.yml` applies the files in `supabase/migrations` that the hosted project lacks, through the Supabase Management API, with the `SUPABASE_ACCESS_TOKEN` secret and the `NEXT_PUBLIC_SUPABASE_URL` variable the repo already has. Vitalos Pulse starts it (Database tab: Check, then Apply), or run it by hand from `main` (Actions > pulse-migrate). `plan` lists what is pending and changes nothing. `apply` needs `confirm=APPLY` and the exact list the plan showed, runs each file in one transaction with its `schema_migrations` row, and refuses destructive SQL (drop, rename, type change, truncate, delete), which stays a reviewed manual change with a backup.
+
 ## Local development
 
 Everything below runs against the local Supabase CLI stack in Docker (`supabase/config.toml`, project `sobautofix-local-tests`, API on `http://127.0.0.1:54321`). Nothing here touches a hosted project.
