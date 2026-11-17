@@ -1,0 +1,387 @@
+#!/usr/bin/env bash
+# Pulse session helper, protocol 1. Rules: .pulse/README.md. Kit source: vitalos-technologies/vitalos-op pulse/kit.
+# Creates and updates this session's file in .pulse/sessions/ so Vitalos Pulse can see the work.
+# Portable: bash, awk, grep, date (GNU or BSD). Never prints secret values.
+set -euo pipefail
+
+PULSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SESS_DIR="$PULSE_DIR/sessions"
+STATUS_FILE="$PULSE_DIR/STATUS.md"
+STATES="active blocked paused done abandoned"
+
+now() { date -u +%Y-%m-%dT%H:%MZ; }
+visibility() { [ -f "$STATUS_FILE" ] && awk '$0=="---"{n++; if(n==2) exit; next} n==1 && /^visibility:/ {sub(/^visibility:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); print; exit}' "$STATUS_FILE" || true; }
+stamp() { date -u "+%Y-%m-%d %H:%MZ"; }
+die() { echo "pulse: $*" >&2; exit 1; }
+tmpf() { mktemp "${TMPDIR:-/tmp}/pulse.XXXXXX"; }
+# replace_from TMP FILE: copies TMP over FILE only when the edit succeeded; always removes TMP.
+replace_from() { if [ -s "$1" ]; then cat "$1" >"$2"; fi; rm -f "$1"; }
+oneline() { printf '%s' "$*" | tr '\r\n\t' '   ' | sed -e 's/^[[:space:]]*//' -e 's/^-[[:space:]][[:space:]]*//' -e 's/[[:space:]]*$//'; }
+
+new_id() { echo "agent_$(date -u +%Y%m%d%H%M%S)_$$"; }
+
+git_dir() { git -C "$PULSE_DIR" rev-parse --absolute-git-dir 2>/dev/null || true; }
+cache_file() { local g; g="$(git_dir)"; [ -n "$g" ] && echo "$g/pulse-session" || echo ""; }
+
+# Works out who this session is. PULSE_* variables override everything.
+detect() {
+  SID="${PULSE_SESSION:-}"
+  SID_FROM=env
+  URL="${PULSE_URL:-}"
+  SURFACE="${PULSE_SURFACE:-}"
+  if [ -z "$SID" ] && [ -n "${CLAUDE_CODE_REMOTE_SESSION_ID:-}" ]; then
+    local r="${CLAUDE_CODE_REMOTE_SESSION_ID#cse_}"
+    r="${r#session_}"
+    SID="session_$r"
+    URL="${URL:-https://claude.ai/code/$SID}"
+    SURFACE="${SURFACE:-cloud}"
+  fi
+  if [ -z "$SID" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    SID="local_${CLAUDE_CODE_SESSION_ID}"
+  fi
+  local cf
+  cf="$(cache_file)"
+  if [ -z "$SID" ] && [ -n "$cf" ] && [ -s "$cf" ]; then
+    SID="$(head -n 1 "$cf")"
+    SID_FROM=cache
+  fi
+  if [ -z "$SID" ]; then
+    SID="$(new_id)"
+    SID_FROM=new
+  fi
+  if [ -z "$SURFACE" ]; then
+    case "${CLAUDE_CODE_ENTRYPOINT:-}" in
+      *desktop*) SURFACE=desktop ;;
+      *remote*) SURFACE=cloud ;;
+      *) SURFACE=cli ;;
+    esac
+  fi
+  ACCOUNT="${PULSE_ACCOUNT:-}"
+  if [ -z "$ACCOUNT" ] && [ -n "${CLAUDE_CODE_USER_EMAIL:-}" ]; then ACCOUNT="${CLAUDE_CODE_USER_EMAIL%%@*}"; fi
+  ACCOUNT="${ACCOUNT:-unknown}"
+  # Public repositories record role accounts only; a personal account shows as "personal".
+  if [ -z "${PULSE_ACCOUNT:-}" ] && [ "$(visibility)" = public ]; then
+    case "$ACCOUNT" in engineering | design | research | ops | unknown) ;; *) ACCOUNT=personal ;; esac
+  fi
+  AGENT="${PULSE_AGENT:-}"
+  if [ -z "$AGENT" ]; then [ -n "${CLAUDECODE:-}" ] && AGENT=claude-code || AGENT=agent; fi
+  BRANCH="$(git -C "$PULSE_DIR" branch --show-current 2>/dev/null || true)"
+  BRANCH="${BRANCH:-detached}"
+}
+
+# This session's file, or nothing.
+find_file() {
+  [ -d "$SESS_DIR" ] || return 0
+  local f
+  f="$(grep -l -x -F "session: $SID" "$SESS_DIR"/*.md 2>/dev/null | head -n 1 || true)"
+  if [ -z "$f" ]; then
+    local cf
+    cf="$(cache_file)"
+    if [ -n "$cf" ] && [ -s "$cf" ] && [ "$(head -n 1 "$cf")" = "$SID" ]; then
+      f="$(sed -n 2p "$cf")"
+      [ -n "$f" ] && [ -f "$f" ] || f=""
+    fi
+  fi
+  printf '%s' "$f"
+}
+
+remember() {
+  local cf
+  cf="$(cache_file)"
+  [ -n "$cf" ] && printf '%s\n%s\n' "$SID" "$1" >"$cf" 2>/dev/null || true
+}
+
+need_file() {
+  FILE="$(find_file)"
+  [ -n "$FILE" ] || die "no session file for $SID yet. Run: .pulse/bin/pulse start \"<what you are doing>\""
+}
+
+# set_meta FILE KEY VALUE: sets a front matter line, adding it if missing.
+set_meta() {
+  local tmp
+  tmp="$(tmpf)"
+  K="$2" V="$3" awk '
+    BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; fm = 0; done = 0 }
+    {
+      if ($0 == "---" && fm < 2) {
+        fm++
+        if (fm == 2 && !done) { print k ": " v; done = 1 }
+        print; next
+      }
+      if (fm == 1 && !done && index($0, k ":") == 1) { print k ": " v; done = 1; next }
+      print
+    }' "$1" >"$tmp" || { rm -f "$tmp"; die "could not edit $1"; }
+  replace_from "$tmp" "$1"
+}
+
+get_meta() {
+  K="$2" awk '
+    BEGIN { k = ENVIRON["K"]; fm = 0 }
+    $0 == "---" { fm++; if (fm == 2) exit; next }
+    fm == 1 && index($0, k ":") == 1 { v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v); print v; exit }
+  ' "$1"
+}
+
+# add_item FILE SECTION TEXT: adds "- TEXT" at the end of "## SECTION", creating the section if needed.
+add_item() {
+  local tmp
+  tmp="$(tmpf)"
+  S="$2" T="$3" awk '
+    BEGIN { s = "## " ENVIRON["S"]; t = "- " ENVIRON["T"] }
+    { line[++n] = $0 }
+    END {
+      start = 0
+      for (i = 1; i <= n; i++) if (line[i] == s) { start = i; break }
+      if (!start) {
+        for (i = 1; i <= n; i++) print line[i]
+        if (n && line[n] != "") print ""
+        print s; print t; exit
+      }
+      stop = n + 1
+      for (i = start + 1; i <= n; i++) if (line[i] ~ /^## /) { stop = i; break }
+      at = start
+      for (i = start + 1; i < stop; i++) if (line[i] != "") at = i
+      for (i = 1; i <= n; i++) {
+        print line[i]
+        if (i == at) print t
+      }
+    }' "$1" >"$tmp" || { rm -f "$tmp"; die "could not edit $1"; }
+  replace_from "$tmp" "$1"
+}
+
+# drop_items FILE SECTION PREFIX: removes "- " items in SECTION that start with PREFIX (all items when PREFIX is empty).
+drop_items() {
+  local tmp
+  tmp="$(tmpf)"
+  S="$2" P="$3" awk '
+    BEGIN { s = "## " ENVIRON["S"]; p = tolower(ENVIRON["P"]); in_s = 0; dropped = 0 }
+    /^## / { in_s = ($0 == s) }
+    {
+      if (in_s && substr($0, 1, 2) == "- ") {
+        item = tolower(substr($0, 3))
+        if (p == "" || index(item, p) == 1) { dropped++; next }
+      }
+      print
+    }
+    END { if (!dropped) print "pulse: nothing matched" > "/dev/stderr" }' "$1" >"$tmp" || { rm -f "$tmp"; die "could not edit $1"; }
+  replace_from "$tmp" "$1"
+}
+
+touch_file() { set_meta "$FILE" updated "$(now)"; }
+log_line() { add_item "$FILE" Log "$(stamp): $(oneline "$1")"; touch_file; }
+
+section_for() {
+  case "$1" in
+    need | needs) echo "Needs Temitope" ;;
+    next) echo "Next" ;;
+    blocker | blockers) echo "Blockers" ;;
+    log) echo "Log" ;;
+    *) die "unknown list \"$1\" (use need, next or blocker)" ;;
+  esac
+}
+
+slugify() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | tr -s '-' | sed -e 's/^-//' -e 's/-$//' | cut -c1-40 | sed -e 's/-$//'
+}
+
+cmd_start() {
+  local title
+  title="$(oneline "${*:-}")"
+  mkdir -p "$SESS_DIR"
+  # Without a session id from the environment, a titled start is a new session: the cached id belongs to
+  # whichever session ran here before. "pulse start" with no title resumes the cached one.
+  if [ "$SID_FROM" = cache ] && [ -n "$title" ]; then
+    SID="$(new_id)"
+    SID_FROM=new
+  fi
+  FILE="$(find_file)"
+  if [ -n "$FILE" ]; then
+    set_meta "$FILE" status active
+    set_meta "$FILE" branch "$BRANCH"
+    log_line "Resumed${title:+: $title}"
+    remember "$FILE"
+    echo "$FILE"
+    return
+  fi
+  [ -n "$title" ] || die "give a one-line title: pulse start \"<what you are doing>\""
+  local slug short
+  slug="$(slugify "$title")"
+  short="$(printf '%s' "$SID" | tr -cd 'A-Za-z0-9' | tail -c 6 | tr '[:upper:]' '[:lower:]')"
+  FILE="$SESS_DIR/$(date -u +%Y-%m-%d)-${slug:-session}-${short}.md"
+  cat >"$FILE" <<EOF
+---
+pulse: session/1
+session: $SID
+url: $URL
+account: $ACCOUNT
+surface: $SURFACE
+agent: $AGENT
+branch: $BRANCH
+title: $title
+status: active
+started: $(now)
+updated: $(now)
+prs:
+---
+
+## Goal
+$title
+
+## Next
+
+## Needs Temitope
+
+## Blockers
+
+## Log
+- $(stamp): Started: $title
+EOF
+  remember "$FILE"
+  echo "$FILE"
+  echo "pulse: created. Commit it with your work and push your branch at least once per work block." >&2
+}
+
+cmd_status() {
+  local st="${1:-}"
+  shift || true
+  case " $STATES " in *" $st "*) ;; *) die "status must be one of: $STATES" ;; esac
+  need_file
+  set_meta "$FILE" status "$st"
+  set_meta "$FILE" branch "$BRANCH"
+  local note
+  note="$(oneline "${*:-}")"
+  log_line "Status $st${note:+: $note}"
+}
+
+cmd_pr() {
+  local url="${1:-}"
+  [[ "$url" =~ ^https://github\.com/.+/pull/[0-9]+$ ]] || die "give the pull request URL: pulse pr https://github.com/<owner>/<repo>/pull/<n>"
+  need_file
+  local have
+  have="$(get_meta "$FILE" prs)"
+  case " $have " in *" $url "*) ;; *) set_meta "$FILE" prs "$(oneline "$have $url")" ;; esac
+  log_line "Opened or updated $url"
+}
+
+cmd_list() {
+  [ -d "$SESS_DIR" ] || { echo "No sessions yet."; return; }
+  local f
+  for f in "$SESS_DIR"/*.md; do
+    [ -f "$f" ] || continue
+    printf '%-9s %-17s %-14s %s  (%s)\n' "$(get_meta "$f" status)" "$(get_meta "$f" updated)" "$(get_meta "$f" account)" "$(get_meta "$f" title)" "${f#"$PULSE_DIR"/}"
+  done | sort -r -k2
+}
+
+# Secret-shaped strings. Kept in step with pulse/src/pulsefiles.js (SECRET_RE).
+SECRET_RE='(sk-ant-[A-Za-z0-9_-]{10,}|sk-(proj-|svcacct-)?[A-Za-z0-9_-]{32,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|(sk|rk)_(live|test)_[A-Za-z0-9]{10,}|whsec_[A-Za-z0-9]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|npm_[A-Za-z0-9]{30,}|GOCSPX-[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.|[a-z][a-z0-9+.-]*://[^/[:space:]:@]+:[^@[:space:]/]+@|AIza[0-9A-Za-z_-]{35}|sbp_[a-f0-9]{30,}|mcp_[0-9a-f]{40,}|re_[A-Za-z0-9]{8,}_[A-Za-z0-9]{8,}|[Bb]earer [A-Za-z0-9._~+/-]{20,}|(password|passwd|secret|token|api[_-]?key)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_+/=.-]{16,})'
+EMAIL_RE='[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
+IP_RE='(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)'
+HOST_RE='[A-Za-z0-9-]+\.(internal|intra|lan|corp)([^A-Za-z0-9-]|$)'
+
+cmd_check() {
+  local errs=0 vis="" f st
+  [ -f "$STATUS_FILE" ] && vis="$(get_meta "$STATUS_FILE" visibility)"
+  local files=()
+  [ -f "$STATUS_FILE" ] && files+=("$STATUS_FILE")
+  for f in "$SESS_DIR"/*.md; do [ -f "$f" ] && files+=("$f"); done
+  for f in ${files[@]+"${files[@]}"}; do
+    local rel="${f#"$PULSE_DIR"/}"
+    if [ "$(head -n 1 "$f")" != "---" ]; then echo "$rel: no front matter"; errs=$((errs + 1)); continue; fi
+    if [ "$f" != "$STATUS_FILE" ]; then
+      for k in session title status updated branch; do
+        [ -n "$(get_meta "$f" "$k")" ] || { echo "$rel: missing $k"; errs=$((errs + 1)); }
+      done
+      st="$(get_meta "$f" status)"
+      case " $STATES " in *" $st "*) ;; *) echo "$rel: status \"$st\" is not one of: $STATES"; errs=$((errs + 1)) ;; esac
+    fi
+    if grep -n -i -E -e "$SECRET_RE" "$f" >/dev/null 2>&1; then
+      echo "$rel: line(s) $(grep -n -i -E -e "$SECRET_RE" "$f" | cut -d: -f1 | tr '\n' ' ')look like a secret value; remove it and name the variable instead"
+      errs=$((errs + 1))
+    fi
+    if [ "$vis" = "public" ]; then
+      local hits
+      hits="$(grep -n -E -e "$EMAIL_RE" "$f" | grep -v -i 'noreply@' | cut -d: -f1 | tr '\n' ' ' || true)"
+      [ -n "$hits" ] && { echo "$rel: line(s) ${hits}hold an email address (public repository)"; errs=$((errs + 1)); }
+      hits="$(grep -n -E -e "$IP_RE" "$f" | grep -v -E '(127\.0\.0\.1|0\.0\.0\.0)' | cut -d: -f1 | tr '\n' ' ' || true)"
+      [ -n "$hits" ] && { echo "$rel: line(s) ${hits}hold an IP address (public repository)"; errs=$((errs + 1)); }
+      hits="$(grep -n -E -e "$HOST_RE" "$f" | cut -d: -f1 | tr '\n' ' ' || true)"
+      [ -n "$hits" ] && { echo "$rel: line(s) ${hits}name an internal host (public repository)"; errs=$((errs + 1)); }
+    fi
+  done
+  if [ "$errs" -gt 0 ]; then echo "pulse check: $errs problem(s)"; return 1; fi
+  echo "pulse check: ${#files[@]} file(s) OK${vis:+ ($vis repository)}"
+}
+
+# Commits only .pulse/ (with [skip ci], so a status-only push runs no CI) and pushes the current branch.
+cmd_sync() {
+  local root def
+  root="$(git -C "$PULSE_DIR" rev-parse --show-toplevel)"
+  cmd_check >/dev/null || { cmd_check; die "fix the problems above before syncing"; }
+  def="$(git -C "$root" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  def="${def#origin/}"
+  [ "$BRANCH" != detached ] || die "not on a branch"
+  if [ -n "$def" ] && [ "$BRANCH" = "$def" ]; then die "on the default branch ($def): commit .pulse/ with your work on a feature branch instead"; fi
+  git -C "$root" add -- .pulse
+  if git -C "$root" diff --cached --quiet -- .pulse; then echo "pulse: nothing new in .pulse/"; else
+    local f title st
+    f="$(find_file)"
+    title="$( [ -n "$f" ] && get_meta "$f" title || echo "status")"
+    st="$( [ -n "$f" ] && get_meta "$f" status || echo "")"
+    git -C "$root" commit -q -m "Pulse: ${title}${st:+ ($st)} [skip ci]" -- .pulse
+  fi
+  git -C "$root" push -q -u origin "HEAD:$BRANCH" && echo "pulse: pushed $BRANCH"
+}
+
+usage() {
+  cat <<'EOF'
+Usage: .pulse/bin/pulse <command> [text]
+  start "<title>"           create (or resume) this session's file
+  log "<text>"              add a dated line to the log
+  next|need|blocker "<text>"  add an item (need = only Temitope can do it)
+  drop next|need|blocker "<start of item>"  remove matching items ("" removes all)
+  status <active|blocked|paused|done|abandoned> ["<note>"]
+  done ["<outcome>"]        status done, with the outcome in the log
+  pr <url>                  record a pull request
+  path | show | who | list  this session's file / its contents / detected identity / all sessions here
+  check                     validate every file in .pulse/ (front matter, secrets, public-repo rules)
+  sync                      commit only .pulse/ with [skip ci] and push this branch (not the default branch)
+Rules: .pulse/README.md
+EOF
+}
+
+main() {
+  local cmd="${1:-help}"
+  shift || true
+  detect
+  case "$cmd" in
+    start) cmd_start "$@" ;;
+    log) need_file; [ -n "${*:-}" ] || die "nothing to log"; log_line "$*" ;;
+    next | need | needs | blocker | blockers)
+      need_file
+      [ -n "${*:-}" ] || die "give the text"
+      add_item "$FILE" "$(section_for "$cmd")" "$(oneline "$*")"
+      touch_file
+      ;;
+    drop)
+      need_file
+      local sec
+      sec="$(section_for "${1:-}")"
+      shift || true
+      drop_items "$FILE" "$sec" "$(oneline "${*:-}")"
+      touch_file
+      ;;
+    status) cmd_status "$@" ;;
+    done) need_file; cmd_status done "$@" ;;
+    pr) cmd_pr "$@" ;;
+    path) FILE="$(find_file)"; [ -n "$FILE" ] || exit 1; echo "$FILE" ;;
+    show) need_file; cat "$FILE" ;;
+    who) printf 'session: %s\nurl: %s\naccount: %s\nsurface: %s\nagent: %s\nbranch: %s\nfile: %s\n' "$SID" "$URL" "$ACCOUNT" "$SURFACE" "$AGENT" "$BRANCH" "$(find_file)" ;;
+    list) cmd_list ;;
+    check) cmd_check ;;
+    sync) cmd_sync ;;
+    help | -h | --help) usage ;;
+    *) usage; exit 2 ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,29 @@
+# Validates .pulse/ (front matter, secret-shaped values, public-repository rules) whenever it changes.
+# Public repositories only (GitHub-hosted runners are free there). Managed by vitalos-technologies/vitalos-op
+# pulse/kit/install.sh; edit it there.
+name: pulse-check
+
+on:
+  pull_request:
+    paths: [".pulse/**"]
+  push:
+    branches: ["main"]
+    paths: [".pulse/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: pulse check
+        run: bash .pulse/bin/pulse check
