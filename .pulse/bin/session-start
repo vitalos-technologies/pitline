@@ -16,7 +16,7 @@ else
   echo "- Before other work, run: .pulse/bin/pulse start \"<one line: what you are doing>\""
 fi
 echo "- Keep it current after each major step, when blocked and before you stop: pulse log | next | need | blocker | status | done."
-echo "- Commit it with your work and push your branch at least once per work block, even unfinished."
+echo "- Commit it with your work and push your branch at least once per work block, even unfinished (pulse sync pushes .pulse/ alone without running CI)."
 echo "- Update .pulse/STATUS.md when the project's stage, health, next steps, needs or blockers change."
 echo "- Never secret values in .pulse/; name the variable instead."
 if [ "$vis" = "public" ]; then
@@ -34,7 +34,7 @@ if [ -d "$dir/sessions" ]; then
   done
   if [ -n "$others" ]; then
     echo "- Unfinished sessions on this branch (check before starting overlapping work):"
-    printf '%s' "$others" | sort | head -n 5 | sed 's/^/    /'
+    printf '%s' "$others" | sort | head -n 5 | tr -cd '[:print:]\n' | cut -c1-140 | sed 's/^/    /'
   fi
 fi
 exit 0

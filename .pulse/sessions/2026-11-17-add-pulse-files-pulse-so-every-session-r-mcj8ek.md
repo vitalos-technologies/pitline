@@ -9,7 +9,7 @@ branch: ccr-716aa99e-tywxji
 title: Add Pulse files (.pulse/) so every session reports to Vitalos Pulse
 status: active
 started: 2026-11-17T09:23Z
-updated: 2026-11-17T09:26Z
+updated: 2026-11-17T09:32Z
 prs: https://github.com/vitalos-technologies/pitline/pull/33
 ---
 
@@ -27,3 +27,4 @@ Add Pulse files (.pulse/) so every session reports to Vitalos Pulse
 - 2026-11-17 09:23Z: Started: Add Pulse files (.pulse/) so every session reports to Vitalos Pulse
 - 2026-11-17 09:23Z: Installed the kit from vitalos-op pulse/kit and seeded STATUS.md from the Pulse record of 14 Nov
 - 2026-11-17 09:26Z: Opened or updated https://github.com/vitalos-technologies/pitline/pull/33
+- 2026-11-17 09:32Z: Applied review fixes: stricter secret check, public-safe STATUS, LF rule, pulse sync, pulse-check workflow on public repos

@@ -10,8 +10,12 @@ STATUS_FILE="$PULSE_DIR/STATUS.md"
 STATES="active blocked paused done abandoned"
 
 now() { date -u +%Y-%m-%dT%H:%MZ; }
+visibility() { [ -f "$STATUS_FILE" ] && awk '$0=="---"{n++; if(n==2) exit; next} n==1 && /^visibility:/ {sub(/^visibility:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); print; exit}' "$STATUS_FILE" || true; }
 stamp() { date -u "+%Y-%m-%d %H:%MZ"; }
 die() { echo "pulse: $*" >&2; exit 1; }
+tmpf() { mktemp "${TMPDIR:-/tmp}/pulse.XXXXXX"; }
+# replace_from TMP FILE: copies TMP over FILE only when the edit succeeded; always removes TMP.
+replace_from() { if [ -s "$1" ]; then cat "$1" >"$2"; fi; rm -f "$1"; }
 oneline() { printf '%s' "$*" | tr '\r\n\t' '   ' | sed -e 's/^[[:space:]]*//' -e 's/^-[[:space:]][[:space:]]*//' -e 's/[[:space:]]*$//'; }
 
 new_id() { echo "agent_$(date -u +%Y%m%d%H%M%S)_$$"; }
@@ -55,6 +59,10 @@ detect() {
   ACCOUNT="${PULSE_ACCOUNT:-}"
   if [ -z "$ACCOUNT" ] && [ -n "${CLAUDE_CODE_USER_EMAIL:-}" ]; then ACCOUNT="${CLAUDE_CODE_USER_EMAIL%%@*}"; fi
   ACCOUNT="${ACCOUNT:-unknown}"
+  # Public repositories record role accounts only; a personal account shows as "personal".
+  if [ -z "${PULSE_ACCOUNT:-}" ] && [ "$(visibility)" = public ]; then
+    case "$ACCOUNT" in engineering | design | research | ops | unknown) ;; *) ACCOUNT=personal ;; esac
+  fi
   AGENT="${PULSE_AGENT:-}"
   if [ -z "$AGENT" ]; then [ -n "${CLAUDECODE:-}" ] && AGENT=claude-code || AGENT=agent; fi
   BRANCH="$(git -C "$PULSE_DIR" branch --show-current 2>/dev/null || true)"
@@ -91,7 +99,7 @@ need_file() {
 # set_meta FILE KEY VALUE: sets a front matter line, adding it if missing.
 set_meta() {
   local tmp
-  tmp="$(mktemp)"
+  tmp="$(tmpf)"
   K="$2" V="$3" awk '
     BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; fm = 0; done = 0 }
     {
@@ -102,7 +110,8 @@ set_meta() {
       }
       if (fm == 1 && !done && index($0, k ":") == 1) { print k ": " v; done = 1; next }
       print
-    }' "$1" >"$tmp" && cat "$tmp" >"$1" && rm -f "$tmp"
+    }' "$1" >"$tmp" || { rm -f "$tmp"; die "could not edit $1"; }
+  replace_from "$tmp" "$1"
 }
 
 get_meta() {
@@ -116,7 +125,7 @@ get_meta() {
 # add_item FILE SECTION TEXT: adds "- TEXT" at the end of "## SECTION", creating the section if needed.
 add_item() {
   local tmp
-  tmp="$(mktemp)"
+  tmp="$(tmpf)"
   S="$2" T="$3" awk '
     BEGIN { s = "## " ENVIRON["S"]; t = "- " ENVIRON["T"] }
     { line[++n] = $0 }
@@ -136,13 +145,14 @@ add_item() {
         print line[i]
         if (i == at) print t
       }
-    }' "$1" >"$tmp" && cat "$tmp" >"$1" && rm -f "$tmp"
+    }' "$1" >"$tmp" || { rm -f "$tmp"; die "could not edit $1"; }
+  replace_from "$tmp" "$1"
 }
 
 # drop_items FILE SECTION PREFIX: removes "- " items in SECTION that start with PREFIX (all items when PREFIX is empty).
 drop_items() {
   local tmp
-  tmp="$(mktemp)"
+  tmp="$(tmpf)"
   S="$2" P="$3" awk '
     BEGIN { s = "## " ENVIRON["S"]; p = tolower(ENVIRON["P"]); in_s = 0; dropped = 0 }
     /^## / { in_s = ($0 == s) }
@@ -153,7 +163,8 @@ drop_items() {
       }
       print
     }
-    END { if (!dropped) print "pulse: nothing matched" > "/dev/stderr" }' "$1" >"$tmp" && cat "$tmp" >"$1" && rm -f "$tmp"
+    END { if (!dropped) print "pulse: nothing matched" > "/dev/stderr" }' "$1" >"$tmp" || { rm -f "$tmp"; die "could not edit $1"; }
+  replace_from "$tmp" "$1"
 }
 
 touch_file() { set_meta "$FILE" updated "$(now)"; }
@@ -262,9 +273,10 @@ cmd_list() {
 }
 
 # Secret-shaped strings. Kept in step with pulse/src/pulsefiles.js (SECRET_RE).
-SECRET_RE='(sk-ant-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9]{32,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|(sk|rk)_(live|test)_[A-Za-z0-9]{10,}|whsec_[A-Za-z0-9]{10,}|eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.|[a-z][a-z0-9+.-]*://[^/[:space:]:@]+:[^@[:space:]/]+@|AIza[0-9A-Za-z_-]{35}|sbp_[a-f0-9]{30,}|mcp_[0-9a-f]{40,}|re_[A-Za-z0-9]{8,}_[A-Za-z0-9]{8,})'
+SECRET_RE='(sk-ant-[A-Za-z0-9_-]{10,}|sk-(proj-|svcacct-)?[A-Za-z0-9_-]{32,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|(sk|rk)_(live|test)_[A-Za-z0-9]{10,}|whsec_[A-Za-z0-9]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|npm_[A-Za-z0-9]{30,}|GOCSPX-[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.|[a-z][a-z0-9+.-]*://[^/[:space:]:@]+:[^@[:space:]/]+@|AIza[0-9A-Za-z_-]{35}|sbp_[a-f0-9]{30,}|mcp_[0-9a-f]{40,}|re_[A-Za-z0-9]{8,}_[A-Za-z0-9]{8,}|[Bb]earer [A-Za-z0-9._~+/-]{20,}|(password|passwd|secret|token|api[_-]?key)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_+/=.-]{16,})'
 EMAIL_RE='[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
 IP_RE='(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)'
+HOST_RE='[A-Za-z0-9-]+\.(internal|intra|lan|corp)([^A-Za-z0-9-]|$)'
 
 cmd_check() {
   local errs=0 vis="" f st
@@ -272,7 +284,7 @@ cmd_check() {
   local files=()
   [ -f "$STATUS_FILE" ] && files+=("$STATUS_FILE")
   for f in "$SESS_DIR"/*.md; do [ -f "$f" ] && files+=("$f"); done
-  for f in "${files[@]}"; do
+  for f in ${files[@]+"${files[@]}"}; do
     local rel="${f#"$PULSE_DIR"/}"
     if [ "$(head -n 1 "$f")" != "---" ]; then echo "$rel: no front matter"; errs=$((errs + 1)); continue; fi
     if [ "$f" != "$STATUS_FILE" ]; then
@@ -282,20 +294,42 @@ cmd_check() {
       st="$(get_meta "$f" status)"
       case " $STATES " in *" $st "*) ;; *) echo "$rel: status \"$st\" is not one of: $STATES"; errs=$((errs + 1)) ;; esac
     fi
-    if grep -n -E -e "$SECRET_RE" "$f" >/dev/null 2>&1; then
-      echo "$rel: line(s) $(grep -n -E -e "$SECRET_RE" "$f" | cut -d: -f1 | tr '\n' ' ')look like a secret value; remove it and name the variable instead"
+    if grep -n -i -E -e "$SECRET_RE" "$f" >/dev/null 2>&1; then
+      echo "$rel: line(s) $(grep -n -i -E -e "$SECRET_RE" "$f" | cut -d: -f1 | tr '\n' ' ')look like a secret value; remove it and name the variable instead"
       errs=$((errs + 1))
     fi
     if [ "$vis" = "public" ]; then
       local hits
       hits="$(grep -n -E -e "$EMAIL_RE" "$f" | grep -v -i 'noreply@' | cut -d: -f1 | tr '\n' ' ' || true)"
       [ -n "$hits" ] && { echo "$rel: line(s) ${hits}hold an email address (public repository)"; errs=$((errs + 1)); }
-      hits="$(grep -n -E -e "$IP_RE" "$f" | cut -d: -f1 | tr '\n' ' ' || true)"
+      hits="$(grep -n -E -e "$IP_RE" "$f" | grep -v -E '(127\.0\.0\.1|0\.0\.0\.0)' | cut -d: -f1 | tr '\n' ' ' || true)"
       [ -n "$hits" ] && { echo "$rel: line(s) ${hits}hold an IP address (public repository)"; errs=$((errs + 1)); }
+      hits="$(grep -n -E -e "$HOST_RE" "$f" | cut -d: -f1 | tr '\n' ' ' || true)"
+      [ -n "$hits" ] && { echo "$rel: line(s) ${hits}name an internal host (public repository)"; errs=$((errs + 1)); }
     fi
   done
   if [ "$errs" -gt 0 ]; then echo "pulse check: $errs problem(s)"; return 1; fi
   echo "pulse check: ${#files[@]} file(s) OK${vis:+ ($vis repository)}"
+}
+
+# Commits only .pulse/ (with [skip ci], so a status-only push runs no CI) and pushes the current branch.
+cmd_sync() {
+  local root def
+  root="$(git -C "$PULSE_DIR" rev-parse --show-toplevel)"
+  cmd_check >/dev/null || { cmd_check; die "fix the problems above before syncing"; }
+  def="$(git -C "$root" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  def="${def#origin/}"
+  [ "$BRANCH" != detached ] || die "not on a branch"
+  if [ -n "$def" ] && [ "$BRANCH" = "$def" ]; then die "on the default branch ($def): commit .pulse/ with your work on a feature branch instead"; fi
+  git -C "$root" add -- .pulse
+  if git -C "$root" diff --cached --quiet -- .pulse; then echo "pulse: nothing new in .pulse/"; else
+    local f title st
+    f="$(find_file)"
+    title="$( [ -n "$f" ] && get_meta "$f" title || echo "status")"
+    st="$( [ -n "$f" ] && get_meta "$f" status || echo "")"
+    git -C "$root" commit -q -m "Pulse: ${title}${st:+ ($st)} [skip ci]" -- .pulse
+  fi
+  git -C "$root" push -q -u origin "HEAD:$BRANCH" && echo "pulse: pushed $BRANCH"
 }
 
 usage() {
@@ -310,6 +344,7 @@ Usage: .pulse/bin/pulse <command> [text]
   pr <url>                  record a pull request
   path | show | who | list  this session's file / its contents / detected identity / all sessions here
   check                     validate every file in .pulse/ (front matter, secrets, public-repo rules)
+  sync                      commit only .pulse/ with [skip ci] and push this branch (not the default branch)
 Rules: .pulse/README.md
 EOF
 }
@@ -343,6 +378,7 @@ main() {
     who) printf 'session: %s\nurl: %s\naccount: %s\nsurface: %s\nagent: %s\nbranch: %s\nfile: %s\n' "$SID" "$URL" "$ACCOUNT" "$SURFACE" "$AGENT" "$BRANCH" "$(find_file)" ;;
     list) cmd_list ;;
     check) cmd_check ;;
+    sync) cmd_sync ;;
     help | -h | --help) usage ;;
     *) usage; exit 2 ;;
   esac

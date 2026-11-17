@@ -37,11 +37,16 @@ One file per session, so parallel sessions never conflict.
 3. **Before you stop** (end of a work block, usage limit, handover): `pulse status paused "<where it stopped and how to
    resume>"`, or `pulse done "<outcome>"` when the task is finished.
 4. **Commit and push.** Commit the file with your work and push your branch at least once per work block, even when the
-   work is unfinished. Pulse cannot see a file that was never pushed.
+   work is unfinished. Pulse cannot see a file that was never pushed. When only `.pulse/` changed (a pause, a handover,
+   a blocker), `pulse sync` commits just `.pulse/` with `[skip ci]` and pushes the branch, so no CI run is spent on it.
+   It refuses to push the default branch.
 
 Statuses: `active`, `blocked` (waiting on someone), `paused` (stopped, can resume), `done`, `abandoned`.
 A session that is active, blocked or paused and unchanged for 3 days is shown on Pulse as **possibly forgotten**.
 A branch pushed in the last 14 days with no session file and no open pull request is shown as **untracked work**.
+
+In public repositories the helper records role accounts only (`engineering`, `design`, `research`); any other account is
+written as `personal`. Session links (`https://claude.ai/code/...`) open only for the account that owns the session.
 
 Editing the files by hand is fine: keep the front matter keys and the `## ` section headings, and keep list items as
 `- ` lines. `pulse check` validates every file here.
@@ -67,7 +72,8 @@ STATUS.md says `visibility: public` when anyone can read this repository. Then a
 security findings and exposed or unrotated credentials, internal hostnames and IP addresses, email addresses, customer
 or prospect names, spend and pricing not yet published, and unannounced plans. Write a neutral line such as
 "Security follow-up recorded privately on Pulse" and put the detail in a Pulse note (`create_note` in the Pulse
-connector) or in a private repository. `pulse check` flags emails and IP addresses in public repositories.
+connector) or in a private repository. `pulse check` flags emails, IP addresses and internal hostnames in public
+repositories, and a `pulse-check` workflow runs it on every change to `.pulse/`.
 
 ## Without the helper
 
