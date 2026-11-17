@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# SessionStart hook (Claude Code, .claude/settings.json): reminds each session of the Pulse rules and shows
+# its own session file, if any. Prints a few lines into the session's context. Never fails, never writes files.
+# Kit source: vitalos-technologies/vitalos-op pulse/kit.
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)" || exit 0
+[ -f "$dir/README.md" ] || exit 0
+meta() { awk -v k="$2" '$0=="---"{n++; if(n==2) exit; next} n==1 && index($0, k ":")==1 {v=substr($0, length(k)+2); sub(/^[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v); print v; exit}' "$1" 2>/dev/null; }
+
+vis="$(meta "$dir/STATUS.md" visibility)"
+mine="$(bash "$dir/bin/pulse" path 2>/dev/null || true)"
+
+echo "Pulse: this repository reports to Vitalos Pulse through .pulse/ (rules: .pulse/README.md). Every session follows them."
+if [ -n "$mine" ]; then
+  echo "- Your session file: .pulse/${mine#"$dir"/} (status $(meta "$mine" status), updated $(meta "$mine" updated)). Run .pulse/bin/pulse start to resume it."
+else
+  echo "- Before other work, run: .pulse/bin/pulse start \"<one line: what you are doing>\""
+fi
+echo "- Keep it current after each major step, when blocked and before you stop: pulse log | next | need | blocker | status | done."
+echo "- Commit it with your work and push your branch at least once per work block, even unfinished."
+echo "- Update .pulse/STATUS.md when the project's stage, health, next steps, needs or blockers change."
+echo "- Never secret values in .pulse/; name the variable instead."
+if [ "$vis" = "public" ]; then
+  echo "- PUBLIC repository: also no security findings, internal hosts, emails, customer names or spend in .pulse/; put those in a Pulse note (create_note)."
+fi
+
+# Other unfinished sessions recorded on this branch, oldest update first (possibly forgotten work).
+if [ -d "$dir/sessions" ]; then
+  others=""
+  for f in "$dir"/sessions/*.md; do
+    [ -f "$f" ] && [ "$f" != "$mine" ] || continue
+    st="$(meta "$f" status)"
+    case "$st" in active | blocked | paused) others="$others$(meta "$f" updated) $st ${f#"$dir"/}: $(meta "$f" title)
+" ;; esac
+  done
+  if [ -n "$others" ]; then
+    echo "- Unfinished sessions on this branch (check before starting overlapping work):"
+    printf '%s' "$others" | sort | head -n 5 | sed 's/^/    /'
+  fi
+fi
+exit 0
