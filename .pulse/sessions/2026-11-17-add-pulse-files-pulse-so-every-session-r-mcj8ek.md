@@ -7,9 +7,9 @@ surface: cloud
 agent: claude-code
 branch: ccr-716aa99e-tywxji
 title: Add Pulse files (.pulse/) so every session reports to Vitalos Pulse
-status: active
+status: done
 started: 2026-11-17T09:23Z
-updated: 2026-11-17T09:32Z
+updated: 2026-11-17T09:47Z
 prs: https://github.com/vitalos-technologies/pitline/pull/33
 ---
 
@@ -17,7 +17,6 @@ prs: https://github.com/vitalos-technologies/pitline/pull/33
 Add Pulse files (.pulse/) so every session reports to Vitalos Pulse
 
 ## Next
-- Merge the pull request once CI is green
 
 ## Needs Temitope
 
@@ -28,3 +27,4 @@ Add Pulse files (.pulse/) so every session reports to Vitalos Pulse
 - 2026-11-17 09:23Z: Installed the kit from vitalos-op pulse/kit and seeded STATUS.md from the Pulse record of 14 Nov
 - 2026-11-17 09:26Z: Opened or updated https://github.com/vitalos-technologies/pitline/pull/33
 - 2026-11-17 09:32Z: Applied review fixes: stricter secret check, public-safe STATUS, LF rule, pulse sync, pulse-check workflow on public repos
+- 2026-11-17 09:47Z: Status done: Kit installed and STATUS.md seeded; PR #33 merges once CI is green
