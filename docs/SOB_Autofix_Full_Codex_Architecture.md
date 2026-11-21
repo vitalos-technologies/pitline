@@ -109,6 +109,11 @@ They are different.
 
 Keep them separate until the client confirms whether this is intentional.
 
+> **Update, 21 Nov 2026 (Pitline copy):** Temitope's call log confirms SOB Autofix's line is **07469 273483**. SOB's live
+> code (`src/config/site.ts`) uses 07469 273483 for both calls and WhatsApp. 07468 273483 appears nowhere in SOB's,
+> Pitline's or Answerd's code. WhatsApp on 07469 has not been checked separately. Pitline and Answerd use neither
+> number: Pitline's own line is +44 114 697 4393 (DECISIONS A420).
+
 ## 3.2 Google Maps
 
 The client supplied the business name but no actual Google Maps URL.
