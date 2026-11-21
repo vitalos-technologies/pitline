@@ -12,6 +12,8 @@ import { randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { isReservedNumber } from "./reserved-numbers.mjs";
+
 const TASKS = ["report", "vercel-domains", "vercel-secrets", "twilio-webhooks", "twilio-number", "twilio-buy-mobile", "resend-domain", "supabase-migrate", "supabase-auth", "stripe-setup"];
 // Cloudflare zone of vitalos.co.uk (docs/autofix/INFRA.md); CLOUDFLARE_ZONE_ID overrides it. The Resend sending
 // domain is pitline.co.uk since D23, so set CLOUDFLARE_ZONE_ID to the pitline.co.uk zone for resend-domain.
@@ -47,6 +49,7 @@ const MIGRATION_PROBES = [
   ["20261029001400", "customers?select=offers_consent"],
   ["20261029002000", "calls?select=ai_summary"],
   ["20261029003000", "platform_enquiries?select=id"],
+  // 20261121000000 (reserved_phone_numbers) only adds a check constraint, which PostgREST can't see.
 ];
 
 // Same cleaning as sync-vercel-env.mjs: no byte-order mark, no stray whitespace.
@@ -288,6 +291,7 @@ async function twilioWebhooks() {
   for (const number of numbers) {
     const voiceHost = number.voice_url ? new URL(number.voice_url).host : "none";
     console.log(`    ${lastFour(number.phone_number)} "${number.friendly_name}" ${serviceSids.has(number.sid) ? "in service" : "not in service"}: voice=${voiceHost} status=${number.status_callback ? new URL(number.status_callback).host : "none"}`);
+    if (isReservedNumber(number.phone_number)) fail(`${lastFour(number.phone_number)} is SOB Autofix's number and must not be on Pitline's Twilio account (DECISIONS D29)`);
   }
 
   if (!apply) {
@@ -331,6 +335,7 @@ async function twilioNumber() {
   const wanted = env("LAUNCH_NUMBER");
   const slug = env("LAUNCH_GARAGE");
   if (!/^\+[1-9][0-9]{6,14}$/.test(wanted ?? "")) return fail("set the workflow input `number` in E.164, e.g. +441146974393");
+  if (isReservedNumber(wanted)) return fail(`${lastFour(wanted)} is SOB Autofix's number: Pitline never takes it (DECISIONS D29)`);
   if (!/^[a-z0-9](-?[a-z0-9])*$/.test(slug ?? "")) return fail("set the workflow input `garage` to the garage's slug, e.g. doncaster-auto");
   const ref = projectRef();
   if (!ref) return fail("NEXT_PUBLIC_SUPABASE_URL is not a https://<ref>.supabase.co URL");
@@ -464,7 +469,7 @@ async function twilioBuyMobile() {
 
   const available = await call(`${api}/AvailablePhoneNumbers/GB/Mobile.json?SmsEnabled=true&VoiceEnabled=true&PageSize=5`, { headers });
   if (!available.ok) return fail(`available UK mobile numbers: ${errorText(available)}`);
-  const candidates = available.body?.available_phone_numbers ?? [];
+  const candidates = (available.body?.available_phone_numbers ?? []).filter((number) => !isReservedNumber(number.phone_number));
   if (!candidates.length) return fail("no UK mobile numbers with SMS and voice are available right now");
   console.log(`  available: ${candidates.map((number) => number.friendly_name).join(", ")}`);
   if (!apply) {

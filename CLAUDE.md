@@ -42,6 +42,7 @@ supabase start           # local DB; then supabase db reset && pnpm db:seed
 6. **MOT is per garage**: show MOT data and services only when `garages.mot_enabled`. SOB's MOT ban and its content-guard test are removed in P1.2.
 7. **Design**: build from `design/`. Phone first (390px), 44px touch targets, real buttons/labels, contrast 4.5:1, `lucide-react` icons, no emoji.
 8. **Times**: store `timestamptz`; compute slots in the garage's time zone (`Europe/London`), test the clock-change days.
+9. **SOB Autofix's numbers are never Pitline's** (DECISIONS D29): never use them as Pitline's line, a garage's Twilio number or in code. The list is `src/lib/calls/reserved-numbers.json`; `src/__tests__/reserved-numbers.test.ts` enforces it.
 
 ## Stop and ask Temitope (add to DECISIONS.md "Waiting on Temitope")
 
