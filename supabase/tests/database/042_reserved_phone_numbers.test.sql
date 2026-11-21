@@ -23,7 +23,7 @@ select throws_ok(
 );
 select throws_ok(
   $$insert into public.garage_phone_numbers (garage_id, number, purpose) values ('a1720000-0000-4000-8000-000000000001', '+447468273483', 'forwarding')$$,
-  '23514', null, 'the 07468 number in SOB Autofix''s spec is refused too'
+  '23514', null, 'SOB Autofix''s WhatsApp number is refused too'
 );
 
 select lives_ok(

@@ -1,8 +1,8 @@
 -- SOB Autofix's lines are never Pitline's (DECISIONS D29, Temitope, 21 Nov 2026).
 --
 -- garage_phone_numbers holds the Twilio numbers Pitline routes to a garage. Neither
--- of SOB Autofix's numbers (phone 07469 273483, the 07468 273483 its spec gave
--- for WhatsApp) may ever be one, whoever writes the row. The same list is in
+-- of SOB Autofix's numbers (phone 07469 273483, WhatsApp 07468 273483; Temitope
+-- confirmed both, 21 Nov 2026) may ever be one, whoever writes the row. The list is in
 -- src/lib/calls/reserved-numbers.json; src/__tests__/reserved-numbers.test.ts
 -- checks they agree. To add a number: a new migration that drops and re-adds
 -- this constraint with the whole list.
