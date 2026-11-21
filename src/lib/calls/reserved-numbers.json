@@ -1,0 +1,4 @@
+{
+  "decision": "DECISIONS D29 (Temitope, 21 Nov 2026): SOB Autofix's phone and WhatsApp lines are never Pitline's. To add a number, add it here and in a new migration that replaces garage_phone_numbers_not_reserved_check.",
+  "numbers": ["+447469273483", "+447468273483"]
+}

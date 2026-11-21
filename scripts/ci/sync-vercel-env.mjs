@@ -7,6 +7,8 @@
 // Also reads SECRET__VERCEL_API_TOKEN, VAR__VERCEL_PROJECT_ID, VAR__VERCEL_TEAM_ID and VERCEL_TARGETS
 // (comma separated: production,preview).
 
+import { isReservedNumber } from "./reserved-numbers.mjs";
+
 const ALLOWED_TARGETS = new Set(["production", "preview"]);
 
 // Values piped into `gh secret set` from Windows PowerShell 5.1 start with a byte-order mark; a stray
@@ -65,6 +67,16 @@ if (stripeKey && !(stripeLive ? /^(sk|rk)_live_/ : /^(sk|rk)_test_/).test(stripe
   );
 }
 
+// Pitline's own line is never one of SOB Autofix's numbers (DECISIONS D29). A list naming one is refused,
+// so Vercel keeps the list it has, and the run fails so the mistake shows.
+let refused = 0;
+const platformNumbers = byKey.get("AUTOFIX_PLATFORM_VOICE_NUMBERS");
+if (platformNumbers && platformNumbers.value.split(",").some((number) => isReservedNumber(number))) {
+  byKey.delete("AUTOFIX_PLATFORM_VOICE_NUMBERS");
+  refused += 1;
+  console.error("skipped AUTOFIX_PLATFORM_VOICE_NUMBERS: it lists SOB Autofix's number, which is never Pitline's line (DECISIONS D29)");
+}
+
 // Modes and plan settings are not secret: show their values so the log says what production runs.
 const SHOWN = /^(MESSAGING_MODE|BILLING_PROVIDER|BILLING_COLLECT_VAT|STRIPE_LIVE_MODE|PAYMENTS_PROVIDER|PLACES_PROVIDER|VEHICLE_LOOKUP_PROVIDER|VERCEL_DOMAINS_MODE|PLAN_[A-Z_]+|SMS_SEGMENT_COST_PENCE|LEGAL_COPY_APPROVED|COOKIE_CONFIGURATION_APPROVED|NEXT_PUBLIC_PITLINE_ASKBRIDGE_SITE_KEY)$/;
 for (const [key, { value, type }] of byKey) if (type === "encrypted" && SHOWN.test(key)) console.log(`value ${key}=${value}`);
@@ -88,4 +100,4 @@ for (const [key, { value, type }] of [...byKey].sort(([a], [b]) => a.localeCompa
 }
 
 console.log(`${byKey.size - failed} of ${byKey.size} set. Redeploy in Vercel for a running deployment to pick them up.`);
-if (failed > 0) process.exit(1);
+if (failed > 0 || refused > 0) process.exit(1);

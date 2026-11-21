@@ -109,6 +109,12 @@ They are different.
 
 Keep them separate until the client confirms whether this is intentional.
 
+> **Resolved, 21 Nov 2026 (Pitline copy):** Temitope confirmed the two numbers are different and both are right:
+> phone **07469 273483** (his call log) and WhatsApp **07468 273483**. SOB's live code (`src/config/site.ts`) used
+> 07469 for WhatsApp too; that is SOB's to fix in its own repository. Both numbers are SOB's and are reserved: Pitline
+> never answers, routes, buys or shows either (DECISIONS D29, enforced in code, scripts and SQL). Pitline's own line
+> is +44 114 697 4393 (DECISIONS A420).
+
 ## 3.2 Google Maps
 
 The client supplied the business name but no actual Google Maps URL.
